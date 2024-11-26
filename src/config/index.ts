@@ -6,6 +6,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
   logging: false,
+  dialect: "postgres",
   dialectOptions: isProduction
     ? {
         ssl: {

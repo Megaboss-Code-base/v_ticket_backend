@@ -8,12 +8,21 @@ import { EXPIRESIN, JWT_SECRET, SALT_ROUNDS } from "../config";
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { name, phone, email, password } = req.body;
+    const {
+      fullName,
+      phone,
+      email,
+      password,
+      profilePic,
+      businessName,
+      companyWebsite,
+      address,
+      timezone,
+    } = req.body;
 
     const validateResult = userRegistrationSchema.validate(req.body);
 
     if (validateResult.error) {
-      console.log("we got to this point", validateResult.error);
       return res.status(400).json({
         Error: validateResult.error.details[0].message,
       });
@@ -31,11 +40,16 @@ export const register = async (req: Request, res: Response) => {
 
     const user = await UserInstance.create({
       id: uuidv4(),
-      name,
+      fullName,
       phone,
       email: newEmail,
       password: userPassword,
       role: "user",
+      profilePic,
+      businessName,
+      companyWebsite,
+      address,
+      timezone,
     });
 
     const { password: _, ...userWithoutPassword } = user.get({ plain: true });
@@ -44,9 +58,9 @@ export const register = async (req: Request, res: Response) => {
       message: "User created successfully ",
       user: userWithoutPassword,
     });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({
-      Error: "Internal server error",
+      Error: `Internal server error: ${error.message}`,
       route: "users/register",
     });
   }

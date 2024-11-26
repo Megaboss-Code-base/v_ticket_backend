@@ -3,12 +3,18 @@ import { db } from "../config";
 
 export interface UserAttribute {
   id: string;
-  phone: string;
-  name: string;
+  fullName: string;
   email: string;
   password: string;
+  profilePic: string;
   role: string;
+  phone: string;
+  businessName: string;
+  companyWebsite: string;
+  address: string;
+  timezone: string;
 }
+
 export class UserInstance extends Model<UserAttribute> {}
 
 UserInstance.init(
@@ -18,9 +24,9 @@ UserInstance.init(
       primaryKey: true,
       allowNull: false,
     },
-    name: {
+    fullName: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
     },
     phone: {
       type: DataTypes.STRING,
@@ -53,6 +59,11 @@ UserInstance.init(
         },
       },
     },
+    profilePic: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: "https://mighty.tools/mockmind-api/content/abstract/41.jpg",
+    },
     role: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -62,6 +73,22 @@ UserInstance.init(
           msg: "Role must be either 'user', 'admin', or 'vendor'",
         },
       },
+    },
+    businessName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    companyWebsite: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    address: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    timezone: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {

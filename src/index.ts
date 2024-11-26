@@ -13,7 +13,7 @@ db.sync()
   .then(() => {
     console.log("DB connected successfully");
   })
-  .catch((err:any) => {
+  .catch((err: any) => {
     console.log(err);
   });
 

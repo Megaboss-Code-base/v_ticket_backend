@@ -24,3 +24,14 @@ export const port = process.env.PORT || 4000;
 export const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS!);
 export const JWT_SECRET = process.env.JWT_SECRET!
 export const EXPIRESIN = process.env.EXPIRESIN!
+
+export function generateRandomAlphaNumeric(length:any) {
+  let result = "";
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
+}

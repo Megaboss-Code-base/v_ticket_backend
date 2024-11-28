@@ -4,17 +4,13 @@ import logger  from 'morgan';
 import helmet  from 'helmet';
 import dotenv from "dotenv"
 
-import {db, port, URL}  from './config';
+import { port}  from './config';
+import sequelize from './config';
+import eventRouter from './routes/event.route';
 
 dotenv.config()
 
-db.sync()
-  .then(() => {
-    console.log("DB connected successfully");
-  })
-  .catch((err) => {
-    console.log(err);
-  });
+
 
 const app: Application = express()
 
@@ -24,10 +20,22 @@ app.use(logger('dev'));
 app.use(helmet());
 app.use(cors())
 
-try {
+app.use('/api/v1/events', eventRouter)
+async function startServer() {
+  try {
+    await sequelize.authenticate();
+    console.log('Database connected successfully');
+    
+    await sequelize.sync();
+    console.log('Models synchronized with database');
+
     app.listen(port, () => {
-        console.log(`Server running on ${URL}:${port}`)
-    })
-} catch (error:any) {
-    console.log(`Error occurred: ${error.message}`)
+      console.log(`Server running on port ${port}`);
+    });
+  } catch (error:any) {
+    console.error('Error starting server:', error.message);
+    process.exit(1);
+  }
 }
+
+startServer()

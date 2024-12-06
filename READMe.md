@@ -1,2 +1,8 @@
-### for migration 
-npx sequelize-cli model:generate --name User --attributes profilePic:string,fullName:string --models-path src/models --migrations-path src/migrations
+### generate migration 
+npx sequelize-cli migration:generate --name fileName
+
+### create migration 
+npx sequelize-cli db:migrate --config config.js
+
+### undo migration 
+npx sequelize-cli db:migrate:undo --config config.js

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { EventService } from "../services/event.service";
-import { EventController } from "../controller/event.controller";
+import { EventController } from "../controllers/event.controller";
 
 const eventRouter = Router()
 const eventService = new EventService()

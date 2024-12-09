@@ -6,8 +6,7 @@ import dotenv from "dotenv";
 
 import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
-import sequelize from './config';
-import eventRouter from './routes/event.route';
+import eventRouter from "./routes/event.route";
 
 dotenv.config();
 
@@ -19,7 +18,6 @@ db.sync()
     console.log(err);
   });
 
-
 const app: Application = express();
 
 app.use(express.json());
@@ -29,6 +27,7 @@ app.use(helmet());
 app.use(cors());
 
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/events", eventRouter);
 
 app.get("/", (req, res) => {
   res.send(`

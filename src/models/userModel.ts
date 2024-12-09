@@ -13,6 +13,8 @@ export interface UserAttribute {
   companyWebsite: string;
   address: string;
   timezone: string;
+  resetPasswordToken: string | null;
+  resetPasswordExpire: Date | null;
 }
 
 export class UserInstance extends Model<UserAttribute> {}
@@ -88,6 +90,14 @@ UserInstance.init(
     },
     timezone: {
       type: DataTypes.STRING,
+      allowNull: true,
+    },
+    resetPasswordToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    resetPasswordExpire: {
+      type: DataTypes.DATE,
       allowNull: true,
     },
   },

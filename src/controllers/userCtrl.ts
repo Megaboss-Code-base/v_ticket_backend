@@ -10,6 +10,7 @@ import {
   JWT_SECRET,
   SALT_ROUNDS,
 } from "../config";
+import sendEmail from "../utilities/sendMail";
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -182,6 +183,7 @@ export const passwordRecovery = async (req: Request, res: Response) => {
     const user = (await UserInstance.findOne({
       where: { email: newEmail },
     })) as unknown as UserAttribute;
+
     if (!user) {
       return res.status(400).json({
         Error: "Invalid credentials",
@@ -193,18 +195,37 @@ export const passwordRecovery = async (req: Request, res: Response) => {
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
     const userPassword = (await bcrypt.hash(resetPassword, salt)) as string;
 
-    await UserInstance.update(
+    const updatedPassword = await UserInstance.update(
       { password: userPassword },
       { where: { email: newEmail } }
     );
 
-    return res.status(200).json({
-      message: "Password successfully updated",
-      password: resetPassword,
-    });
-  } catch (error) {
+    if (updatedPassword) {
+      const resetUrl = `${req.protocol}://${req.get(
+        "host"
+      )}/auth/resetpassword/${userPassword}`;
+
+      const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PATCH request to: \n\n ${resetUrl}`;
+
+      try {
+        await sendEmail({
+          email: user.email,
+          subject: "Password reset token",
+          message,
+        });
+
+        return res
+          .status(200)
+          .json({ success: true, data: "Email sent", password: resetPassword });
+      } catch (err: any) {
+        return res
+          .status(500)
+          .json({ success: false, data: `Email not sent: ${err.message}` });
+      }
+    }
+  } catch (error: any) {
     res.status(500).json({
-      Error: "Internal server error",
+      Error: `Internal server error ${error.message}`,
       route: "users/password-recovery",
     });
   }

@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 
 import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
+import sequelize from './config';
+import eventRouter from './routes/event.route';
 
 dotenv.config();
 
@@ -16,6 +18,7 @@ db.sync()
   .catch((err: any) => {
     console.log(err);
   });
+
 
 const app: Application = express();
 

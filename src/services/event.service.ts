@@ -1,8 +1,7 @@
 import { IEvent } from "../interface/event.interface";
 import Event from "../models/event.model";
 import { v4 as uuidv4 } from "uuid";
-import { eventValidationSchema } from "../utilities/event.validate";
-import { validate } from "../utilities/validation";
+import { eventValidationSchema, validate } from "../utilities/validation";
 
 export class EventService{
 

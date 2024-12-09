@@ -1,16 +1,16 @@
 import { DataTypes, Model } from "sequelize";
 import { db } from "../config";
-
 import { IEvent } from "../interface/event.interface";
 
 class Event extends Model<IEvent> implements IEvent {
-  public id!: string;
-  public title!: string;
-  public description!: string;
-  public date!: Date;
-  public location!: string;
-  public price!: number;
-  public ticketType!: "BASIC" | "VIP";
+  // Avoid declaring public class fields for attributes
+  public readonly id!: string;
+  public readonly title!: string;
+  public readonly description!: string;
+  public readonly date!: Date;
+  public readonly location!: string;
+  public readonly price!: number;
+  public readonly ticketType!: "BASIC" | "VIP";
   public readonly createdAt?: Date;
   public readonly updatedAt?: Date;
 }
@@ -21,6 +21,7 @@ Event.init(
       type: DataTypes.UUID,
       primaryKey: true,
       allowNull: false,
+      defaultValue: DataTypes.UUIDV4,
     },
     title: {
       type: DataTypes.STRING,
@@ -32,7 +33,6 @@ Event.init(
     },
     date: {
       type: DataTypes.DATE,
-      // allowNull: false,
     },
     location: {
       type: DataTypes.STRING,

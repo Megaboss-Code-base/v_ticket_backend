@@ -1,5 +1,5 @@
-import { DataTypes, Model } from "sequelize";
-import { db } from "../config";
+import { DataTypes, Model } from 'sequelize';
+import { db } from '../config';
 
 export interface UserAttribute {
   id: string;
@@ -13,8 +13,9 @@ export interface UserAttribute {
   companyWebsite: string;
   address: string;
   timezone: string;
-  resetPasswordToken: string | null;
-  resetPasswordExpire: Date | null;
+  isVerified: boolean;
+  userValidationSecret: string | null;
+  otpVerificationExpiry: Date | null;
 }
 
 export class UserInstance extends Model<UserAttribute> {}
@@ -33,52 +34,36 @@ UserInstance.init(
     phone: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        notNull: {
-          msg: "Please input phone number",
-        },
-      },
     },
     email: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      validate: {
-        notNull: {
-          msg: "Email address is required",
-        },
-        isEmail: {
-          msg: "Please provide a valid email",
-        },
-      },
     },
     password: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        notNull: {
-          msg: "Please input password",
-        },
-      },
     },
     profilePic: {
       type: DataTypes.STRING,
       allowNull: true,
-      defaultValue: "https://mighty.tools/mockmind-api/content/abstract/41.jpg",
     },
     role: {
       type: DataTypes.STRING,
       allowNull: true,
-      validate: {
-        isIn: {
-          args: [["user", "admin", "vendor"]],
-          msg: "Role must be either 'user', 'admin', or 'vendor'",
-        },
-      },
     },
     businessName: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    userValidationSecret: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    isVerified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
     },
     companyWebsite: {
       type: DataTypes.STRING,
@@ -92,17 +77,13 @@ UserInstance.init(
       type: DataTypes.STRING,
       allowNull: true,
     },
-    resetPasswordToken: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    resetPasswordExpire: {
+    otpVerificationExpiry: {
       type: DataTypes.DATE,
       allowNull: true,
     },
   },
   {
     sequelize: db,
-    tableName: "user",
+    tableName: 'user',
   }
 );

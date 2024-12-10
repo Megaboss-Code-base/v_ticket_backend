@@ -4,15 +4,19 @@ import { v4 as uuidv4 } from "uuid";
 import { userRegistrationSchema } from "../utilities/validation";
 import bcrypt from "bcryptjs";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import speakeasy from "speakeasy";
+import dayjs, { ManipulateType } from "dayjs";
 import {
   EXPIRESIN,
   generateRandomAlphaNumeric,
   JWT_SECRET,
+  resetPasswordExpireMinutes,
+  resetPasswordExpireUnit,
   SALT_ROUNDS,
 } from "../config";
 import sendEmail from "../utilities/sendMail";
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: Request, res: Response): Promise<any> => {
   try {
     const {
       fullName,
@@ -41,8 +45,17 @@ export const register = async (req: Request, res: Response) => {
         Error: "Email already exists",
       });
     }
+
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
-    const userPassword = (await bcrypt.hash(password, salt)) as string;
+    const userPassword = await bcrypt.hash(password, salt);
+
+    const userValidationSecret = speakeasy.generateSecret().base32;
+    const otpVerificationExpiry = dayjs()
+      .add(
+        resetPasswordExpireMinutes,
+        resetPasswordExpireUnit as ManipulateType
+      )
+      .toDate();
 
     const user = await UserInstance.create({
       id: uuidv4(),
@@ -56,13 +69,29 @@ export const register = async (req: Request, res: Response) => {
       companyWebsite,
       address,
       timezone,
+      userValidationSecret,
+      otpVerificationExpiry,
+      isVerified: false,
     });
 
-    const { password: _, ...userWithoutPassword } = user.get({ plain: true });
+    const {
+      password: _,
+      userValidationSecret: __,
+      ...userWithoutSensitiveData
+    } = user.get({
+      plain: true,
+    });
+
+    await sendEmail({
+      email: newEmail,
+      subject: "Verify Your Account",
+      message: `Your verification code is: ${userValidationSecret} and it will expire in the next 10 mins`,
+    });
 
     return res.status(201).json({
-      message: "User created successfully ",
-      user: userWithoutPassword,
+      message:
+        "User created successfully. Please check your email to verify your account.",
+      user: userWithoutSensitiveData,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -72,7 +101,111 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const verifyOTP = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { email, secret } = req.body;
+
+    const newEmail = email.trim().toLowerCase();
+
+    const user = (await UserInstance.findOne({
+      where: { email: newEmail },
+    })) as unknown as UserAttribute;
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: "Account already verified" });
+    }
+
+    if (dayjs().isAfter(dayjs(user.otpVerificationExpiry))) {
+      return res.status(400).json({
+        message: "Verification code expired. Please request a new one.",
+      });
+    }
+
+    if (secret !== user.userValidationSecret) {
+      return res.status(400).json({ message: "Invalid verification code" });
+    }
+
+    await UserInstance.update(
+      {
+        isVerified: true,
+        userValidationSecret: null,
+        otpVerificationExpiry: null,
+      },
+      { where: { email: user.email } }
+    );
+
+    return res.status(200).json({ message: "Account verified successfully" });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/verify",
+    });
+  }
+};
+
+export const resendVerificationOTP = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  try {
+    const { email } = req.body;
+
+    const newEmail = email.trim().toLowerCase();
+
+    const user = (await UserInstance.findOne({
+      where: { email: newEmail },
+    })) as unknown as UserAttribute;
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: "Account already verified" });
+    }
+
+    const userValidationSecret = speakeasy.generateSecret().base32;
+    const otpVerificationExpiry = dayjs()
+      .add(
+        resetPasswordExpireMinutes,
+        resetPasswordExpireUnit as ManipulateType
+      )
+      .toDate();
+
+    user.userValidationSecret = userValidationSecret;
+    user.otpVerificationExpiry;
+
+    await UserInstance.update(
+      {
+        userValidationSecret,
+        otpVerificationExpiry,
+      },
+      { where: { email: user.email } }
+    );
+
+    await sendEmail({
+      email: user.email,
+      subject: "Resend Verification Code",
+      message: `Your new verification code is: ${userValidationSecret} and it will expire in the next 10 mins`,
+    });
+
+    return res.status(200).json({
+      message:
+        "Verification code resent successfully. Please check your email.",
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/resend-verification",
+    });
+  }
+};
+
+export const login = async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = req.body;
 
@@ -93,6 +226,13 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    if (user.isVerified === false) {
+      return res.status(400).json({
+        Error:
+          "Your account has not been verified please request for an otp by clicking the button below",
+      });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(400).json({
@@ -101,7 +241,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email!, role: user.role },
+      { id: user.id, email: user.email!, role: user.role },
       JWT_SECRET!,
       { expiresIn: EXPIRESIN! }
     );
@@ -109,8 +249,8 @@ export const login = async (req: Request, res: Response) => {
     user.password = undefined!;
     return res.status(200).json({
       message: "Login successful",
-      user,
       token,
+      user,
     });
   } catch (error) {
     res.status(500).json({
@@ -120,7 +260,10 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-export const changePassword = async (req: Request, res: Response) => {
+export const changePassword = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
     const { email, previousPassword, newPassword } = req.body;
 
@@ -175,7 +318,10 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
-export const passwordRecovery = async (req: Request, res: Response) => {
+export const passwordRecovery = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
     const { email } = req.body;
 
@@ -227,6 +373,86 @@ export const passwordRecovery = async (req: Request, res: Response) => {
     res.status(500).json({
       Error: `Internal server error ${error.message}`,
       route: "users/password-recovery",
+    });
+  }
+};
+
+export const getProfile = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+
+    const user = await UserInstance.findOne({
+      where: { id: userId },
+      attributes: { exclude: ["password", "userValidationSecret", "otpVerificationExpiry", "updatedAt", "createdAt", "id"] },
+    });
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User profile fetched successfully",
+      user,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/get-profile",
+    });
+  }
+};
+
+export const updateProfile = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+    const {
+      fullName,
+      phone,
+      profilePic,
+      businessName,
+      companyWebsite,
+      address,
+      timezone,
+    } = req.body;
+
+    const user = await UserInstance.findOne({
+      where: { id: userId },
+      attributes: { exclude: ["password", "userValidationSecret", "otpVerificationExpiry", "updatedAt", "createdAt", "id"] },
+    });
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    const updateFields: any = {};
+
+    if (fullName) updateFields.fullName = fullName;
+    if (phone) updateFields.phone = phone;
+    if (profilePic) updateFields.profilePic = profilePic;
+    if (businessName) updateFields.businessName = businessName;
+    if (companyWebsite) updateFields.companyWebsite = companyWebsite;
+    if (address) updateFields.address = address;
+    if (timezone) updateFields.timezone = timezone;
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ Error: "No valid fields to update" });
+    }
+
+    await UserInstance.update(updateFields, { where: { id: userId } });
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/update-profile",
     });
   }
 };

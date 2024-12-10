@@ -82,10 +82,16 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       plain: true,
     });
 
+    const resetUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/auth/verify-otp/${userValidationSecret}`;
+
+    const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
+
     await sendEmail({
       email: newEmail,
       subject: "Verify Your Account",
-      message: `Your verification code is: ${userValidationSecret} and it will expire in the next 10 mins`,
+      message,
     });
 
     return res.status(201).json({
@@ -187,10 +193,17 @@ export const resendVerificationOTP = async (
       { where: { email: user.email } }
     );
 
+  
+    const resetUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/auth/verify-otp/${userValidationSecret}`;
+
+    const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
+
     await sendEmail({
-      email: user.email,
-      subject: "Resend Verification Code",
-      message: `Your new verification code is: ${userValidationSecret} and it will expire in the next 10 mins`,
+      email: newEmail,
+      subject: "Verify Your Account",
+      message,
     });
 
     return res.status(200).json({

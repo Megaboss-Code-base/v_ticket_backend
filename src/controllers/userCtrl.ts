@@ -7,6 +7,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import dayjs, { ManipulateType } from "dayjs";
 import {
+  db,
   EXPIRESIN,
   generateRandomAlphaNumeric,
   JWT_SECRET,
@@ -16,7 +17,9 @@ import {
 } from "../config";
 import sendEmail from "../utilities/sendMail";
 
+
 export const register = async (req: Request, res: Response): Promise<any> => {
+  const transaction = await db.transaction();
   try {
     const {
       fullName,
@@ -39,8 +42,12 @@ export const register = async (req: Request, res: Response): Promise<any> => {
     }
 
     const newEmail = email.trim().toLowerCase();
-    const User = await UserInstance.findOne({ where: { email: newEmail } });
-    if (User) {
+    const existingUser = await UserInstance.findOne({
+      where: { email: newEmail },
+      transaction,
+    });
+
+    if (existingUser) {
       return res.status(400).json({
         Error: "Email already exists",
       });
@@ -57,30 +64,31 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       )
       .toDate();
 
-    const user = await UserInstance.create({
-      id: uuidv4(),
-      fullName,
-      phone,
-      email: newEmail,
-      password: userPassword,
-      role: "user",
-      profilePic,
-      businessName,
-      companyWebsite,
-      address,
-      timezone,
-      userValidationSecret,
-      otpVerificationExpiry,
-      isVerified: false,
-    });
+    const user = await UserInstance.create(
+      {
+        id: uuidv4(),
+        fullName,
+        phone,
+        email: newEmail,
+        password: userPassword,
+        role: "user",
+        profilePic,
+        businessName,
+        companyWebsite,
+        address,
+        timezone,
+        userValidationSecret,
+        otpVerificationExpiry,
+        isVerified: false,
+      },
+      { transaction }
+    );
 
     const {
       password: _,
       userValidationSecret: __,
       ...userWithoutSensitiveData
-    } = user.get({
-      plain: true,
-    });
+    } = user.get({ plain: true });
 
     const resetUrl = `${req.protocol}://${req.get(
       "host"
@@ -94,18 +102,112 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       message,
     });
 
+    await transaction.commit();
+
     return res.status(201).json({
       message:
         "User created successfully. Please check your email to verify your account.",
       user: userWithoutSensitiveData,
     });
   } catch (error: any) {
+    await transaction.rollback();
     res.status(500).json({
       Error: `Internal server error: ${error.message}`,
       route: "users/register",
     });
   }
 };
+
+// export const register = async (req: Request, res: Response): Promise<any> => {
+//   try {
+//     const {
+//       fullName,
+//       phone,
+//       email,
+//       password,
+//       profilePic,
+//       businessName,
+//       companyWebsite,
+//       address,
+//       timezone,
+//     } = req.body;
+
+//     const validateResult = userRegistrationSchema.validate(req.body);
+
+//     if (validateResult.error) {
+//       return res.status(400).json({
+//         Error: validateResult.error.details[0].message,
+//       });
+//     }
+
+//     const newEmail = email.trim().toLowerCase();
+//     const User = await UserInstance.findOne({ where: { email: newEmail } });
+//     if (User) {
+//       return res.status(400).json({
+//         Error: "Email already exists",
+//       });
+//     }
+
+//     const salt = await bcrypt.genSalt(SALT_ROUNDS);
+//     const userPassword = await bcrypt.hash(password, salt);
+
+//     const userValidationSecret = speakeasy.generateSecret().base32;
+//     const otpVerificationExpiry = dayjs()
+//       .add(
+//         resetPasswordExpireMinutes,
+//         resetPasswordExpireUnit as ManipulateType
+//       )
+//       .toDate();
+
+//     const user = await UserInstance.create({
+//       id: uuidv4(),
+//       fullName,
+//       phone,
+//       email: newEmail,
+//       password: userPassword,
+//       role: "user",
+//       profilePic,
+//       businessName,
+//       companyWebsite,
+//       address,
+//       timezone,
+//       userValidationSecret,
+//       otpVerificationExpiry,
+//       isVerified: false,
+//     });
+
+//     const {
+//       password: _,
+//       userValidationSecret: __,
+//       ...userWithoutSensitiveData
+//     } = user.get({
+//       plain: true,
+//     });
+
+//     const resetUrl = `${req.protocol}://${req.get(
+//       "host"
+//     )}/auth/verify-otp/${userValidationSecret}`;
+
+//     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
+
+//     await sendEmail({
+//       email: newEmail,
+//       subject: "Verify Your Account",
+//       message,
+//     });
+
+//     return res.status(201).json({
+//       message:
+//         "User created successfully. Please check your email to verify your account.",
+//       user: userWithoutSensitiveData,
+//     });
+//   } catch (error: any) {
+//     res.status(500).json({
+//       Error: `Internal server error: ${error.message}`,
+//       route: "users/register",
+//     });
+//   }
+// };
 
 export const verifyOTP = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -193,7 +295,6 @@ export const resendVerificationOTP = async (
       { where: { email: user.email } }
     );
 
-  
     const resetUrl = `${req.protocol}://${req.get(
       "host"
     )}/auth/verify-otp/${userValidationSecret}`;
@@ -399,7 +500,16 @@ export const getProfile = async (
 
     const user = await UserInstance.findOne({
       where: { id: userId },
-      attributes: { exclude: ["password", "userValidationSecret", "otpVerificationExpiry", "updatedAt", "createdAt", "id"] },
+      attributes: {
+        exclude: [
+          "password",
+          "userValidationSecret",
+          "otpVerificationExpiry",
+          "updatedAt",
+          "createdAt",
+          "id",
+        ],
+      },
     });
 
     if (!user) {
@@ -436,7 +546,16 @@ export const updateProfile = async (
 
     const user = await UserInstance.findOne({
       where: { id: userId },
-      attributes: { exclude: ["password", "userValidationSecret", "otpVerificationExpiry", "updatedAt", "createdAt", "id"] },
+      attributes: {
+        exclude: [
+          "password",
+          "userValidationSecret",
+          "otpVerificationExpiry",
+          "updatedAt",
+          "createdAt",
+          "id",
+        ],
+      },
     });
 
     if (!user) {

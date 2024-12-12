@@ -1,4 +1,4 @@
-import Joi,{ ObjectSchema } from "joi";
+import Joi, { ObjectSchema } from "joi";
 
 export const userRegistrationSchema = Joi.object({
   phone: Joi.string()
@@ -39,21 +39,28 @@ export const userRegistrationSchema = Joi.object({
   }),
 });
 
-export const eventValidationSchema = Joi.object({
-  title: Joi.string().min(3).max(255).required(),
-  description: Joi.string().min(10).required(),
-  date: Joi.date().iso().required(),
-  location: Joi.string().min(3).max(255).required(),
-  price: Joi.number().min(0).precision(2).required(),
-  ticketType: Joi.string().valid("BASIC", "VIP").required(),
-});
+export const validate = <T>(
+  data: T,
+  schema: ObjectSchema
+): { value: T; error?: string } => {
+  const { error, value } = schema.validate(data, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
 
-export const validate = <T>(data: T, schema: ObjectSchema): { value: T; error?: string } => {
-  const { error, value } = schema.validate(data, { abortEarly: false, stripUnknown: true });
-  
   if (error) {
     return { value, error: error.details.map((err) => err.message).join(", ") };
   }
 
   return { value };
 };
+
+export const eventValidationSchema = Joi.object({
+  title: Joi.string().required(),
+  description: Joi.string().required(),
+  image: Joi.string().required(),
+  date: Joi.date().required(),
+  location: Joi.string().required(),
+  price: Joi.number().min(0).required(),
+  ticketType: Joi.object().pattern(Joi.string(), Joi.number().min(1)).required(),
+});

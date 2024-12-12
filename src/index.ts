@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 
 import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
-import eventRouter from "./routes/event.route";
+import eventRouter from "./routes/event";
 
 dotenv.config();
 

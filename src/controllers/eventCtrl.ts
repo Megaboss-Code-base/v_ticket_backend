@@ -9,6 +9,14 @@ export const createEvent = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
+  const userId = req.user;
+
+  if (!userId) {
+    return res
+      .status(404)
+      .json({ message: "Please log in to create an event" });
+  }
+
   try {
     const validateResult = eventValidationSchema.validate(req.body);
 
@@ -29,7 +37,7 @@ export const createEvent = async (
       location,
       price,
       ticketType,
-      userId: req.user,
+      userId,
     });
 
     return res

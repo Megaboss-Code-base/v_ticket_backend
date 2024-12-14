@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
 import eventRouter from "./routes/event";
+import ticketRouter from "./routes/ticket";
+import notificationRouter from "./routes//notification";
 
 dotenv.config();
 
@@ -28,6 +30,8 @@ app.use(cors());
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/events", eventRouter);
+app.use("/api/v1/tickets", ticketRouter);
+app.use("/api/v1/notifications", notificationRouter);
 
 app.get("/", (req, res) => {
   res.send(`

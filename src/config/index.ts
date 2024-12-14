@@ -27,6 +27,7 @@ export const JWT_SECRET = process.env.JWT_SECRET!
 export const EXPIRESIN = process.env.EXPIRESIN!
 export const resetPasswordExpireMinutes = parseInt(process.env.RESET_PASSWORD_EXPIRE_MINUTES!);
 export const resetPasswordExpireUnit = process.env.RESET_PASSWORD_EXPIRE_UNIT! as string;
+export const CLOUDINARY_URL = process.env.CLOUDINARY_URL!;
 
 export function generateRandomAlphaNumeric(length:any) {
   let result = "";

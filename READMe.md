@@ -6,3 +6,7 @@ npx sequelize-cli db:migrate --config config.js
 
 ### undo migration 
 npx sequelize-cli db:migrate:undo --config config.js
+
+https://virtual-ticket-two.vercel.app/dashboard
+
+

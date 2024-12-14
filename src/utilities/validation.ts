@@ -22,9 +22,6 @@ export const userRegistrationSchema = Joi.object({
     "string.min": "Password must be at least 5 characters",
     "string.max": "Password must be at most 30 characters",
   }),
-  profilePic: Joi.string().uri().allow(null).optional().messages({
-    "string.uri": "Profile picture must be a valid URL",
-  }),
   businessName: Joi.string().allow(null).optional().messages({
     "string.empty": "Business name cannot be empty",
   }),
@@ -58,9 +55,11 @@ export const validate = <T>(
 export const eventValidationSchema = Joi.object({
   title: Joi.string().required(),
   description: Joi.string().required(),
-  image: Joi.string().required(),
   date: Joi.date().required(),
   location: Joi.string().required(),
-  price: Joi.number().min(0).required(),
-  ticketType: Joi.object().pattern(Joi.string(), Joi.number().min(1)).required(),
+  price: Joi.string().required(),
+  quantity: Joi.number().min(0).required(),
+  ticketType: Joi.object()
+    .pattern(Joi.string(), Joi.string().min(1))
+    .required(),
 });

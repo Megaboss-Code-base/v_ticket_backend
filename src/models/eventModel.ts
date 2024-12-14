@@ -1,6 +1,6 @@
-import { DataTypes, Model } from 'sequelize';
-import { db } from '../config';
-import { UserInstance } from './userModel';
+import { DataTypes, Model } from "sequelize";
+import { db } from "../config";
+import { UserInstance } from "./userModel";
 
 export interface EventAttribute {
   id: string;
@@ -9,9 +9,11 @@ export interface EventAttribute {
   image: string;
   date: Date;
   location: string;
-  price: number;
+  price: string;
   ticketType: Record<string, number>;
   userId: string;
+  quantity: number;
+  sold: number;    
 }
 
 export class EventInstance extends Model<EventAttribute> {}
@@ -44,7 +46,7 @@ EventInstance.init(
       allowNull: false,
     },
     price: {
-      type: DataTypes.FLOAT,
+      type: DataTypes.STRING,
       allowNull: false,
     },
     ticketType: {
@@ -55,12 +57,22 @@ EventInstance.init(
       type: DataTypes.UUID,
       allowNull: false,
     },
+    quantity: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0, 
+    },
+    sold: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0, 
+    },
   },
   {
     sequelize: db,
-    tableName: 'events',
+    tableName: "events",
   }
 );
 
-UserInstance.hasMany(EventInstance, { foreignKey: 'userId', as: 'events' });
-EventInstance.belongsTo(UserInstance, { foreignKey: 'userId', as: 'user' });
+UserInstance.hasMany(EventInstance, { foreignKey: "userId", as: "events" });
+EventInstance.belongsTo(UserInstance, { foreignKey: "userId", as: "user" });

@@ -17,7 +17,6 @@ import {
 } from "../config";
 import sendEmail from "../utilities/sendMail";
 
-
 export const register = async (req: Request, res: Response): Promise<any> => {
   const transaction = await db.transaction();
   try {
@@ -26,7 +25,6 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       phone,
       email,
       password,
-      profilePic,
       businessName,
       companyWebsite,
       address,
@@ -72,7 +70,8 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         email: newEmail,
         password: userPassword,
         role: "user",
-        profilePic,
+        profilePic:
+          "https://images.squarespace-cdn.com/content/v1/54642373e4b024e8934bf4f4/8c711e5f-367a-43a8-8d43-ef18a3a04508/the+citadel.jpg",
         businessName,
         companyWebsite,
         address,
@@ -494,6 +493,40 @@ export const updateProfile = async (
     res.status(500).json({
       Error: `Internal server error: ${error.message}`,
       route: "users/update-profile",
+    });
+  }
+};
+
+export const uploadPicture = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+    const fileUrl = req.file?.path;
+
+    const user = await UserInstance.findOne({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(400).json({ message: "Please login" });
+    }
+
+    if (!fileUrl) {
+      return res.status(400).json({ message: "File upload failed" });
+    }
+
+    await UserInstance.update(
+      { profilePic: fileUrl },
+      { where: { id: userId } }
+    );
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/upload-image",
     });
   }
 };

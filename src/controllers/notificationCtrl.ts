@@ -24,7 +24,9 @@ export const getUserNotifications = async (
       return res.status(404).json({ message: "No notifications found" });
     }
 
-    return res.status(200).json({ notifications });
+    return res
+      .status(200)
+      .json({ counts: notifications.length, notifications });
   } catch (error: any) {
     return res
       .status(500)

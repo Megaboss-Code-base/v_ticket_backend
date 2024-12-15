@@ -2,7 +2,7 @@ import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
 dotenv.config();
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
   logging: false,
@@ -11,25 +11,31 @@ export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
     ? {
         ssl: {
           require: true,
-          rejectUnauthorized: false
-        }
+          rejectUnauthorized: false,
+        },
       }
     : {
-        ssl: false
-      }
+        ssl: false,
+      },
 });
-
 
 export const URL = process.env.URL as string;
 export const port = process.env.PORT || 4000;
 export const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS!);
-export const JWT_SECRET = process.env.JWT_SECRET!
-export const EXPIRESIN = process.env.EXPIRESIN!
-export const resetPasswordExpireMinutes = parseInt(process.env.RESET_PASSWORD_EXPIRE_MINUTES!);
-export const resetPasswordExpireUnit = process.env.RESET_PASSWORD_EXPIRE_UNIT! as string;
+export const JWT_SECRET = process.env.JWT_SECRET!;
+export const EXPIRESIN = process.env.EXPIRESIN!;
+export const resetPasswordExpireMinutes = parseInt(
+  process.env.RESET_PASSWORD_EXPIRE_MINUTES!
+);
+export const resetPasswordExpireUnit = process.env
+  .RESET_PASSWORD_EXPIRE_UNIT! as string;
 export const CLOUDINARY_URL = process.env.CLOUDINARY_URL!;
+export const FLWPUBK = process.env.FLWPUBK!;
+export const FLWSECK = process.env.FLWSECK!;
+export const BASE_URL = process.env.BASE_URL!;
+export const FRONTEND_URL = process.env.FRONTEND_URL!;
 
-export function generateRandomAlphaNumeric(length:any) {
+export function generateRandomAlphaNumeric(length: any) {
   let result = "";
   const characters =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

@@ -14,6 +14,8 @@ export interface TicketAttribute {
   validationStatus: "Valid" | "Used" | "Expired" | "Invalid";
   seatNumber?: string;
   paid: boolean;
+  currency: string;
+  flwRef?: string;
 }
 
 export class TicketInstance extends Model<TicketAttribute> {}
@@ -62,6 +64,14 @@ TicketInstance.init(
       defaultValue: "Invalid",
     },
     seatNumber: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    currency: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    flwRef: {
       type: DataTypes.STRING,
       allowNull: true,
     },

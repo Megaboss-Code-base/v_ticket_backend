@@ -5,6 +5,9 @@ import { v4 as uuidv4 } from "uuid";
 import { JwtPayload } from "jsonwebtoken";
 import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
+import { initiatePayment, verifyPayment } from "../interface/payment.dto";
+import { BASE_URL, FRONTEND_URL } from "../config";
+import { UserAttribute, UserInstance } from "../models/userModel";
 
 export const purchaseTicket = async (
   req: JwtPayload,
@@ -12,9 +15,16 @@ export const purchaseTicket = async (
 ): Promise<any> => {
   const userId = req.user;
   const { eventId } = req.params;
-  const { ticketType } = req.body;
+  const { ticketType,currency } = req.body;
 
   try {
+    const user = (await UserInstance.findOne({
+      where: { id: userId },
+    })) as unknown as UserAttribute;
+    if (!user) {
+      return res.status(404).json({ error: "USer not found" });
+    }
+
     const event = (await EventInstance.findOne({
       where: { id: eventId },
     })) as unknown as EventAttribute;
@@ -54,8 +64,9 @@ export const purchaseTicket = async (
       purchaseDate: new Date(),
       qrCode,
       paid: false,
+      currency,
       validationStatus: "Invalid",
-    });
+    }) as unknown as TicketAttribute;
 
     const notification = await NotificationInstance.create({
       id: uuidv4(),
@@ -65,8 +76,17 @@ export const purchaseTicket = async (
       isRead: false,
     });
 
+    const paymentLink = await initiatePayment({
+      tx_ref: newTicket.id,
+      amount: newTicket.price,
+      currency: newTicket.currency,
+      email: user.email,
+      redirect_url: `${BASE_URL}/tickets/callback`,
+    });
+
     return res.status(201).json({
-      message: "Ticket purchased successfully. You can make the payment now.",
+      message: "Ticket created successfully",
+      paymentLink,
       ticket: newTicket,
     });
   } catch (error: any) {
@@ -200,10 +220,64 @@ export const getEventTickets = async (
 
     const tickets = await TicketInstance.findAll({ where: { eventId } });
 
-    return res.status(200).json({ counts: tickets.length,tickets });
+    return res.status(200).json({ counts: tickets.length, tickets });
   } catch (error: any) {
     return res
       .status(500)
       .json({ error: "Failed to fetch tickets", details: error.message });
+  }
+};
+
+export const paymentVerification = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { transaction_id, tx_ref } = req.query;
+
+  try {
+    // Verify payment
+    const paymentData = await verifyPayment(transaction_id as string);
+
+    if (paymentData.tx_ref === tx_ref) {
+      await TicketInstance.update(
+        {
+          paid: true,
+          validationStatus: "Valid",
+          flwRef: paymentData.flw_ref,
+          currency: paymentData.currency,
+        },
+        {
+          where: { id: tx_ref },
+        }
+      );
+
+      const ticket = (await TicketInstance.findOne({
+        where: { id: tx_ref },
+      })) as unknown as TicketAttribute;
+      const event = (await EventInstance.findOne({
+        where: { id: ticket?.eventId },
+      })) as unknown as EventAttribute;
+
+      if (event) {
+        if (event.quantity <= 0) {
+          throw new Error("Event is sold out");
+        }
+
+        await EventInstance.update(
+          {
+            quantity: event.quantity - 1,
+            sold: event.sold + 1,
+          },
+          { where: { id: ticket?.eventId } }
+        );
+      }
+
+      res.redirect(`${FRONTEND_URL}/payment-success`);
+    } else {
+      throw new Error("Transaction reference mismatch");
+    }
+  } catch (error) {
+    console.error(error);
+    res.redirect(`${FRONTEND_URL}/payment-failed`);
   }
 };

@@ -18,7 +18,7 @@ router.post("/create-event", auth, upload.single("file"), createEvent);
 router.get("/all-events", getAllEvents);
 router.get("/my-events", auth, getAllMyEvents);
 router.get("/:id", auth, getEventById);
-router.patch("/:id", auth, updateEvent);
+router.patch("/:id", auth,upload.single("file"), updateEvent);
 router.delete("/:id", auth, deleteEvent);
 router.get(
   "/sorted-by-sold-quantity-ratio",

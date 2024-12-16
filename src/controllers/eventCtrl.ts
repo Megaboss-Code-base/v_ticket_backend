@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { EventAttribute, EventInstance } from "../models/eventModel";
+import {  EventInstance } from "../models/eventModel";
 import { UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
-import { eventValidationSchema } from "../utilities/validation";
+import { eventValidationSchema, updateEventValidationSchema } from "../utilities/validation";
 import { Sequelize } from "sequelize";
+
 
 export const createEvent = async (
   req: JwtPayload,
@@ -19,6 +20,12 @@ export const createEvent = async (
       .json({ message: "Please log in to create an event" });
   }
 
+  if (!fileUrl) {
+    return res
+      .status(404)
+      .json({ message: "Please provide an image" });
+  }
+
   try {
     const validateResult = eventValidationSchema.validate(req.body);
 
@@ -27,8 +34,16 @@ export const createEvent = async (
         Error: validateResult.error.details[0].message,
       });
     }
-    const { title, description, quantity, date, location, price, ticketType } =
-      validateResult.value;
+
+    const { ticketType } = validateResult.value;
+    const ticketTypeArray = JSON.parse(ticketType);
+
+    const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
+      ...ticket,
+      sold: "0", 
+    }));
+
+    const { title, description, date, location } = validateResult.value;
 
     const newEvent = await EventInstance.create({
       id: uuidv4(),
@@ -37,10 +52,7 @@ export const createEvent = async (
       image: fileUrl,
       date,
       location,
-      price,
-      quantity,
-      sold: 0,
-      ticketType,
+      ticketType: updatedTicketTypes,
       userId,
     });
 
@@ -119,51 +131,255 @@ export const getAllMyEvents = async (
   }
 };
 
+// export const updateEvent = async (
+//   req: JwtPayload,
+//   res: Response
+// ): Promise<any> => {
+//   try {
+//     const { id } = req.params;
+//     const fileUrl = req.file?.path;
+
+//     const { error,value } = updateEventValidationSchema.validate(req.body);
+//     if (error) {
+//       return res.status(400).json({
+//         message: "Validation Error",
+//         error: error.details[0].message,
+//       });
+//     }
+
+//     const { title, description, date, location, ticketType } = value;
+
+//     const event = await EventInstance.findOne({
+//       where: {
+//         id,
+//         userId: req.user, 
+//       },
+//     });
+
+//     if (!event) {
+//       return res.status(404).json({
+//         message: "Event not found or User not authorized",
+//       });
+//     }
+
+//     const updatedData: any = {};
+
+//     if (title) updatedData.title = title;
+//     if (description) updatedData.description = description;
+//     if (req.file?.path) updatedData.image = req.file?.path;
+//     if (date) updatedData.date = date;
+//     if (location) updatedData.location = location;
+
+//     if (ticketType) {
+//       try {
+//         const ticketTypeArray = typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
+
+//         if (Array.isArray(ticketTypeArray)) {
+//           updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
+//             ...ticket,
+//             sold: "0",
+//           }));
+//         } else {
+//           return res.status(400).json({ Error: "Invalid ticketType format" });
+//         }
+//       } catch (err) {
+//         return res.status(400).json({ Error: "Failed to parse ticketType" });
+//       }
+//     }
+
+//     if (Object.keys(updatedData).length === 0) {
+//       return res.status(400).json({ Error: "No valid fields to update" });
+//     }
+
+//     await EventInstance.update(updatedData, {
+//       where: { id },
+//     });
+
+//     const updatedEvent = await EventInstance.findOne({
+//       where: { id },
+//     });
+
+//     return res.status(200).json({
+//       message: "Event updated successfully",
+//       event: updatedEvent,
+//     });
+//   } catch (error: any) {
+//     return res.status(500).json({
+//       message: "Error updating event",
+//       error: error.message,
+//     });
+//   }
+// };
+// export const updateEvent = async (
+//   req: JwtPayload,
+//   res: Response
+// ): Promise<any> => {
+//   try {
+//     const { id } = req.params;
+//     const fileUrl = req.file?.path;
+
+//     const { error, value } = updateEventValidationSchema.validate(req.body);
+//     if (error) {
+//       return res.status(400).json({
+//         message: "Validation Error",
+//         error: error.details[0].message,
+//       });
+//     }
+
+//     const { title, description, date, location, ticketType } = value;
+
+//     // Find the event to update
+//     const event = await EventInstance.findOne({
+//       where: {
+//         id,
+//         userId: req.user, 
+//       },
+//     });
+
+//     if (!event) {
+//       return res.status(404).json({
+//         message: "Event not found or User not authorized",
+//       });
+//     }
+
+//     // Check if any ticket has a sold value greater than 0 in the event's current ticketType
+//     if (event.ticketType && event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)) {
+//       // If a ticket has been sold, prevent the ticketType from being updated
+//       if (ticketType) {
+//         return res.status(400).json({
+//           message: "Cannot update ticketType because some tickets have been sold",
+//         });
+//       }
+//     }
+
+//     const updatedData: any = {};
+
+//     if (title) updatedData.title = title;
+//     if (description) updatedData.description = description;
+//     if (req.file?.path) updatedData.image = req.file?.path;
+//     if (date) updatedData.date = date;
+//     if (location) updatedData.location = location;
+
+//     if (ticketType) {
+//       try {
+//         const ticketTypeArray = typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
+
+//         if (Array.isArray(ticketTypeArray)) {
+//           updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
+//             ...ticket,
+//             sold: "0",
+//           }));
+//         } else {
+//           return res.status(400).json({ Error: "Invalid ticketType format" });
+//         }
+//       } catch (err) {
+//         return res.status(400).json({ Error: "Failed to parse ticketType" });
+//       }
+//     }
+
+//     if (Object.keys(updatedData).length === 0) {
+//       return res.status(400).json({ Error: "No valid fields to update" });
+//     }
+
+//     // Update the event with the new data
+//     await EventInstance.update(updatedData, {
+//       where: { id },
+//     });
+
+//     // Retrieve the updated event from the database
+//     const updatedEvent = await EventInstance.findOne({
+//       where: { id },
+//     });
+
+//     return res.status(200).json({
+//       message: "Event updated successfully",
+//       event: updatedEvent,
+//     });
+//   } catch (error: any) {
+//     return res.status(500).json({
+//       message: "Error updating event",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const updateEvent = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
   try {
     const { id } = req.params;
-    const { title, description, image, date, location, price, ticketType } =
-      req.body;
+    const fileUrl = req.file?.path;
 
-    // Fetch the event to ensure it exists and belongs to the user
+    const { error, value } = updateEventValidationSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        message: "Validation Error",
+        error: error.details[0].message,
+      });
+    }
+
+    const { title, description, date, location, ticketType } = value;
+
+    // Find the event to update
     const event = await EventInstance.findOne({
       where: {
-        id: id,
-        userId: req.user,  // Assuming `userId` is stored in the JWT payload
+        id,
+        userId: req.user, 
       },
     });
 
     if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not authorized" });
+      return res.status(404).json({
+        message: "Event not found or User not authorized",
+      });
     }
 
-    // Prepare the data to be updated
+    // Declare updatedData at the start
     const updatedData: any = {};
 
+    // Check if any ticket has a sold value greater than 0 in the event's current ticketType
+    if (event.ticketType && event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)) {
+      // Prevent updating tickets with sold > 0
+      if (ticketType) {
+        // Only allow updates to ticket types where sold == 0
+        const validTicketType = ticketType.filter((ticket: any) => {
+          const existingTicket = event.ticketType.find((t: any) => t.name === ticket.name);
+          return !existingTicket || parseInt(existingTicket.sold) === 0;
+        });
+
+        // If ticketType has tickets with sold > 0, return error
+        if (validTicketType.length !== ticketType.length) {
+          return res.status(400).json({
+            message: "Cannot update ticketType because some tickets have been sold",
+          });
+        }
+
+        // Update only valid tickets
+        updatedData.ticketType = validTicketType.map((ticket: any) => ({
+          ...ticket,
+          sold: "0", // Reset sold to "0" for valid tickets
+        }));
+      }
+    }
+
+    // Now update the other fields
     if (title) updatedData.title = title;
     if (description) updatedData.description = description;
-    if (image) updatedData.image = image;
+    if (req.file?.path) updatedData.image = req.file?.path;
     if (date) updatedData.date = date;
     if (location) updatedData.location = location;
-    if (price) updatedData.price = price;
-    if (ticketType) updatedData.ticketType = ticketType;
 
-    // If no fields to update, return an error
     if (Object.keys(updatedData).length === 0) {
       return res.status(400).json({ Error: "No valid fields to update" });
     }
 
-    // Perform the update
+    // Update the event with the new data
     await EventInstance.update(updatedData, {
       where: { id },
     });
 
-    // Fetch the updated event and return it
+    // Retrieve the updated event from the database
     const updatedEvent = await EventInstance.findOne({
       where: { id },
     });
@@ -173,9 +389,10 @@ export const updateEvent = async (
       event: updatedEvent,
     });
   } catch (error: any) {
-    return res
-      .status(500)
-      .json({ message: "Error updating event", error: error.message });
+    return res.status(500).json({
+      message: "Error updating event",
+      error: error.message,
+    });
   }
 };
 
@@ -218,14 +435,26 @@ export const getEventsSortedBySoldQuantityRatio = async (
       attributes: {
         include: [
           [
-            Sequelize.literal('CAST("sold" AS FLOAT) / NULLIF("quantity", 0)'),
+            Sequelize.literal(
+              `(
+                SELECT MAX(CAST("sold" AS FLOAT) / NULLIF("quantity", 0))
+                FROM jsonb_array_elements("ticketType") AS ticket
+                WHERE ticket->>'sold' IS NOT NULL AND ticket->>'quantity' IS NOT NULL
+              )`
+            ),
             "soldToQuantityRatio",
           ],
         ],
       },
       order: [
         [
-          Sequelize.literal('CAST("sold" AS FLOAT) / NULLIF("quantity", 0)'),
+          Sequelize.literal(
+            `(
+              SELECT MAX(CAST("sold" AS FLOAT) / NULLIF("quantity", 0))
+              FROM jsonb_array_elements("ticketType") AS ticket
+              WHERE ticket->>'sold' IS NOT NULL AND ticket->>'quantity' IS NOT NULL
+            )`
+          ),
           "DESC",
         ],
       ],
@@ -246,3 +475,4 @@ export const getEventsSortedBySoldQuantityRatio = async (
     });
   }
 };
+

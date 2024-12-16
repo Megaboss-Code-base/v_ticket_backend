@@ -1,13 +1,16 @@
 import { Request, Response } from "express";
-import { EventAttribute, EventInstance } from "../models/eventModel";
+import {  EventInstance } from "../models/eventModel";
 import { TicketAttribute, TicketInstance } from "../models/ticketModel";
 import { v4 as uuidv4 } from "uuid";
 import { JwtPayload } from "jsonwebtoken";
 import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
-import { initiatePayment, verifyPayment } from "../interface/payment.dto";
-import { BASE_URL, FRONTEND_URL } from "../config";
 import { UserAttribute, UserInstance } from "../models/userModel";
+import axios from "axios";
+
+const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
+const BASE_URL2 = "https://api.paystack.co";
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 export const purchaseTicket = async (
   req: JwtPayload,
@@ -15,36 +18,24 @@ export const purchaseTicket = async (
 ): Promise<any> => {
   const userId = req.user;
   const { eventId } = req.params;
-  const { ticketType,currency } = req.body;
+  const { ticketType, currency } = req.body;
 
   try {
-    const user = (await UserInstance.findOne({
-      where: { id: userId },
-    })) as unknown as UserAttribute;
-    if (!user) {
-      return res.status(404).json({ error: "USer not found" });
-    }
+    const user = await UserInstance.findOne({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    const event = (await EventInstance.findOne({
-      where: { id: eventId },
-    })) as unknown as EventAttribute;
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
+    const event = await EventInstance.findOne({ where: { id: eventId } });
+    if (!event) return res.status(404).json({ error: "Event not found" });
 
-    if (new Date() > new Date(event.date)) {
-      return res
-        .status(400)
-        .json({ error: "Cannot purchase tickets for expired events" });
-    }
+    if (new Date() > new Date(event.date))
+      return res.status(400).json({ error: "Cannot purchase tickets for expired events" });
 
-    const ticketPrice = event.ticketType[ticketType];
-    if (!ticketPrice) {
-      return res.status(400).json({ error: "Invalid ticket type" });
-    }
+    const ticket = event.ticketType.find((ticket) => ticket.name === ticketType);
+    if (!ticket) return res.status(400).json({ error: "Invalid ticket type" });
+
+    const ticketPrice = parseFloat(ticket.price);
 
     const ticketId = uuidv4();
-
     const qrCodeData = {
       ticketId,
       userId,
@@ -66,33 +57,112 @@ export const purchaseTicket = async (
       paid: false,
       currency,
       validationStatus: "Invalid",
-    }) as unknown as TicketAttribute;
+    });
 
-    const notification = await NotificationInstance.create({
+    await NotificationInstance.create({
       id: uuidv4(),
-      title: "Ticket Purchase Successful",
-      message: `You have successfully purchased a ${ticketType} ticket for the event ${event.title}.`,
+      title: "Ticket Purchase Initiated",
+      message: `You have successfully initiated the purchase for a ${ticketType} ticket for the event ${event.title}. Please complete payment to confirm.`,
       userId,
       isRead: false,
     });
 
-    const paymentLink = await initiatePayment({
-      tx_ref: newTicket.id,
-      amount: newTicket.price,
-      currency: newTicket.currency,
-      email: user.email,
-      redirect_url: `${BASE_URL}/tickets/callback`,
-    });
-
     return res.status(201).json({
-      message: "Ticket created successfully",
-      paymentLink,
+      message: "Ticket created successfully. Complete your payment to confirm.",
       ticket: newTicket,
     });
   } catch (error: any) {
-    return res
-      .status(500)
-      .json({ error: "Failed to purchase ticket", details: error.message });
+    return res.status(500).json({
+      error: "Failed to create ticket",
+      details: error.message,
+    });
+  }
+};
+
+export const processPayment = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const userId = req.user;
+  const { ticketId } = req.params;
+
+  try {
+    const ticket = await TicketInstance.findOne({ where: { id: ticketId } }) as unknown as TicketAttribute;
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    if (ticket.paid) {
+      return res.status(400).json({ error: "Ticket has already been paid for" });
+    }
+
+    const user = await UserInstance.findOne({ where: { id: userId } }) as unknown as UserAttribute;
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const event = await EventInstance.findOne({ where: { id: ticket.eventId } });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const paymentPayload = {
+      amount: ticket.price * 100,
+      email: user.email,
+      reference: ticket.id,
+      callback_url: `${FRONTEND_URL}/tickets/callback`,
+    };
+
+    const paymentResponse = await initializePayment(paymentPayload);
+
+    return res.status(200).json({
+      message: "Payment initiated. Please complete the payment.",
+      paymentLink: paymentResponse.data.authorization_url,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "Failed to initiate payment",
+      details: error.message,
+    });
+  }
+};
+
+export const paymentCallback = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { transaction_id, tx_ref, status } = req.query;
+
+  try {
+    if (status !== "successful") {
+      return res.status(400).json({ error: "Payment failed" });
+    }
+
+    const ticket = await TicketInstance.findOne({ where: { id: tx_ref as string } })as unknown as TicketAttribute;
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    await TicketInstance.update(
+      { paid: true, validationStatus: "Valid" },
+      { where: { id: tx_ref as string } }
+    );
+
+    const event = await EventInstance.findOne({ where: { id: ticket.eventId } });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const updatedTicketType = event.ticketType.map((eventTicket) => {
+      if (eventTicket.name === ticket.ticketType) {
+        const updatedQuantity = parseInt(eventTicket.quantity, 10) - 1;
+        const updatedSold = parseInt(eventTicket.sold, 10) + 1;
+        return { ...eventTicket, quantity: updatedQuantity.toString(), sold: updatedSold.toString() };
+      }
+      return eventTicket;
+    });
+
+    await EventInstance.update(
+      { ticketType: updatedTicketType },
+      { where: { id: event.id } }
+    );
+
+    return res.status(200).json({ message: "Payment successful and ticket confirmed" });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "Payment callback processing failed",
+      details: error.message,
+    });
   }
 };
 
@@ -206,7 +276,7 @@ export const getEventTickets = async (
   try {
     const event = (await EventInstance.findOne({
       where: { id: eventId },
-    })) as unknown as EventAttribute;
+    }));
 
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
@@ -228,56 +298,44 @@ export const getEventTickets = async (
   }
 };
 
-export const paymentVerification = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const { transaction_id, tx_ref } = req.query;
-
+const initializePayment = async (payload: {
+  amount: number;
+  email: string;
+  reference: string;
+  callback_url: string;
+}) => {
   try {
-    // Verify payment
-    const paymentData = await verifyPayment(transaction_id as string);
-
-    if (paymentData.tx_ref === tx_ref) {
-      await TicketInstance.update(
-        {
-          paid: true,
-          validationStatus: "Valid",
-          flwRef: paymentData.flw_ref,
-          currency: paymentData.currency,
+    const response = await axios.post(
+      `${BASE_URL2}/transaction/initialize`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET}`,
+          "Content-Type": "application/json",
         },
-        {
-          where: { id: tx_ref },
-        }
-      );
-
-      const ticket = (await TicketInstance.findOne({
-        where: { id: tx_ref },
-      })) as unknown as TicketAttribute;
-      const event = (await EventInstance.findOne({
-        where: { id: ticket?.eventId },
-      })) as unknown as EventAttribute;
-
-      if (event) {
-        if (event.quantity <= 0) {
-          throw new Error("Event is sold out");
-        }
-
-        await EventInstance.update(
-          {
-            quantity: event.quantity - 1,
-            sold: event.sold + 1,
-          },
-          { where: { id: ticket?.eventId } }
-        );
       }
+    );
+    return response.data;
+  } catch (error: any) {
+    throw new Error(
+      error.response?.data?.message || "Payment initialization failed"
+    );
+  }
+};
 
-      res.redirect(`${FRONTEND_URL}/payment-success`);
-    } else {
-      throw new Error("Transaction reference mismatch");
-    }
-  } catch (error) {
-    console.error(error);
-    res.redirect(`${FRONTEND_URL}/payment-failed`);
+export const verifyPayment = async (reference: string) => {
+  try {
+    const response = await axios.get(
+      `https://api.paystack.co/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY!}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error:any) {
+    console.error("Payment verification error:", error.response?.data || error);
+    throw new Error("Payment verification failed");
   }
 };

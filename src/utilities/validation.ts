@@ -57,9 +57,15 @@ export const eventValidationSchema = Joi.object({
   description: Joi.string().required(),
   date: Joi.date().required(),
   location: Joi.string().required(),
-  price: Joi.string().required(),
-  quantity: Joi.number().min(0).required(),
-  ticketType: Joi.object()
-    .pattern(Joi.string(), Joi.string().min(1))
-    .required(),
+  ticketType: Joi.string().required(), 
 });
+
+export const updateEventValidationSchema = Joi.object({
+  title: Joi.string().optional(),
+  description: Joi.string().optional(),
+  date: Joi.date().optional(),
+  location: Joi.string().optional(),
+  ticketType: Joi.string().optional(), 
+});
+
+

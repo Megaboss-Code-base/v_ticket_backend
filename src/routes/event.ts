@@ -17,7 +17,7 @@ const router = express.Router();
 router.post("/create-event", auth, upload.single("file"), createEvent);
 router.get("/all-events", getAllEvents);
 router.get("/my-events", auth, getAllMyEvents);
-router.get("/:id", auth, getEventById);
+router.get("/:id", getEventById);
 router.patch("/:id", auth,upload.single("file"), updateEvent);
 router.delete("/:id", auth, deleteEvent);
 router.get(

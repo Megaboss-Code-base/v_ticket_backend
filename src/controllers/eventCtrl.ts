@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import {  EventInstance } from "../models/eventModel";
+import { EventInstance } from "../models/eventModel";
 import { UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
-import { eventValidationSchema, updateEventValidationSchema } from "../utilities/validation";
+import {
+  eventValidationSchema,
+  updateEventValidationSchema,
+} from "../utilities/validation";
 import { Sequelize } from "sequelize";
-
 
 export const createEvent = async (
   req: JwtPayload,
@@ -21,9 +23,7 @@ export const createEvent = async (
   }
 
   if (!fileUrl) {
-    return res
-      .status(404)
-      .json({ message: "Please provide an image" });
+    return res.status(404).json({ message: "Please provide an image" });
   }
 
   try {
@@ -40,7 +40,7 @@ export const createEvent = async (
 
     const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
       ...ticket,
-      sold: "0", 
+      sold: "0",
     }));
 
     const { title, description, date, location } = validateResult.value;
@@ -90,14 +90,11 @@ export const getEventById = async (
     const event = await EventInstance.findOne({
       where: {
         id: id,
-        userId: req.user,
       },
     });
 
     if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not the right user" });
+      return res.status(404).json({ message: "Event not found" });
     }
 
     return res.status(200).json({ event });
@@ -152,7 +149,7 @@ export const getAllMyEvents = async (
 //     const event = await EventInstance.findOne({
 //       where: {
 //         id,
-//         userId: req.user, 
+//         userId: req.user,
 //       },
 //     });
 
@@ -210,99 +207,6 @@ export const getAllMyEvents = async (
 //     });
 //   }
 // };
-// export const updateEvent = async (
-//   req: JwtPayload,
-//   res: Response
-// ): Promise<any> => {
-//   try {
-//     const { id } = req.params;
-//     const fileUrl = req.file?.path;
-
-//     const { error, value } = updateEventValidationSchema.validate(req.body);
-//     if (error) {
-//       return res.status(400).json({
-//         message: "Validation Error",
-//         error: error.details[0].message,
-//       });
-//     }
-
-//     const { title, description, date, location, ticketType } = value;
-
-//     // Find the event to update
-//     const event = await EventInstance.findOne({
-//       where: {
-//         id,
-//         userId: req.user, 
-//       },
-//     });
-
-//     if (!event) {
-//       return res.status(404).json({
-//         message: "Event not found or User not authorized",
-//       });
-//     }
-
-//     // Check if any ticket has a sold value greater than 0 in the event's current ticketType
-//     if (event.ticketType && event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)) {
-//       // If a ticket has been sold, prevent the ticketType from being updated
-//       if (ticketType) {
-//         return res.status(400).json({
-//           message: "Cannot update ticketType because some tickets have been sold",
-//         });
-//       }
-//     }
-
-//     const updatedData: any = {};
-
-//     if (title) updatedData.title = title;
-//     if (description) updatedData.description = description;
-//     if (req.file?.path) updatedData.image = req.file?.path;
-//     if (date) updatedData.date = date;
-//     if (location) updatedData.location = location;
-
-//     if (ticketType) {
-//       try {
-//         const ticketTypeArray = typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
-
-//         if (Array.isArray(ticketTypeArray)) {
-//           updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
-//             ...ticket,
-//             sold: "0",
-//           }));
-//         } else {
-//           return res.status(400).json({ Error: "Invalid ticketType format" });
-//         }
-//       } catch (err) {
-//         return res.status(400).json({ Error: "Failed to parse ticketType" });
-//       }
-//     }
-
-//     if (Object.keys(updatedData).length === 0) {
-//       return res.status(400).json({ Error: "No valid fields to update" });
-//     }
-
-//     // Update the event with the new data
-//     await EventInstance.update(updatedData, {
-//       where: { id },
-//     });
-
-//     // Retrieve the updated event from the database
-//     const updatedEvent = await EventInstance.findOne({
-//       where: { id },
-//     });
-
-//     return res.status(200).json({
-//       message: "Event updated successfully",
-//       event: updatedEvent,
-//     });
-//   } catch (error: any) {
-//     return res.status(500).json({
-//       message: "Error updating event",
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const updateEvent = async (
   req: JwtPayload,
   res: Response
@@ -325,7 +229,7 @@ export const updateEvent = async (
     const event = await EventInstance.findOne({
       where: {
         id,
-        userId: req.user, 
+        userId: req.user,
       },
     });
 
@@ -335,40 +239,45 @@ export const updateEvent = async (
       });
     }
 
-    // Declare updatedData at the start
-    const updatedData: any = {};
-
     // Check if any ticket has a sold value greater than 0 in the event's current ticketType
-    if (event.ticketType && event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)) {
-      // Prevent updating tickets with sold > 0
+    if (
+      event.ticketType &&
+      event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)
+    ) {
+      // If a ticket has been sold, prevent the ticketType from being updated
       if (ticketType) {
-        // Only allow updates to ticket types where sold == 0
-        const validTicketType = ticketType.filter((ticket: any) => {
-          const existingTicket = event.ticketType.find((t: any) => t.name === ticket.name);
-          return !existingTicket || parseInt(existingTicket.sold) === 0;
+        return res.status(400).json({
+          message:
+            "Cannot update ticketType because some tickets have been sold",
         });
-
-        // If ticketType has tickets with sold > 0, return error
-        if (validTicketType.length !== ticketType.length) {
-          return res.status(400).json({
-            message: "Cannot update ticketType because some tickets have been sold",
-          });
-        }
-
-        // Update only valid tickets
-        updatedData.ticketType = validTicketType.map((ticket: any) => ({
-          ...ticket,
-          sold: "0", // Reset sold to "0" for valid tickets
-        }));
       }
     }
 
-    // Now update the other fields
+    const updatedData: any = {};
+
     if (title) updatedData.title = title;
     if (description) updatedData.description = description;
     if (req.file?.path) updatedData.image = req.file?.path;
     if (date) updatedData.date = date;
     if (location) updatedData.location = location;
+
+    if (ticketType) {
+      try {
+        const ticketTypeArray =
+          typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
+
+        if (Array.isArray(ticketTypeArray)) {
+          updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
+            ...ticket,
+            sold: "0",
+          }));
+        } else {
+          return res.status(400).json({ Error: "Invalid ticketType format" });
+        }
+      } catch (err) {
+        return res.status(400).json({ Error: "Failed to parse ticketType" });
+      }
+    }
 
     if (Object.keys(updatedData).length === 0) {
       return res.status(400).json({ Error: "No valid fields to update" });
@@ -395,7 +304,6 @@ export const updateEvent = async (
     });
   }
 };
-
 
 export const deleteEvent = async (
   req: JwtPayload,
@@ -475,4 +383,3 @@ export const getEventsSortedBySoldQuantityRatio = async (
     });
   }
 };
-

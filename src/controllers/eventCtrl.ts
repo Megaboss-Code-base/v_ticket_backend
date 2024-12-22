@@ -128,92 +128,12 @@ export const getAllMyEvents = async (
   }
 };
 
-// export const updateEvent = async (
-//   req: JwtPayload,
-//   res: Response
-// ): Promise<any> => {
-//   try {
-//     const { id } = req.params;
-//     const fileUrl = req.file?.path;
-
-//     const { error,value } = updateEventValidationSchema.validate(req.body);
-//     if (error) {
-//       return res.status(400).json({
-//         message: "Validation Error",
-//         error: error.details[0].message,
-//       });
-//     }
-
-//     const { title, description, date, location, ticketType } = value;
-
-//     const event = await EventInstance.findOne({
-//       where: {
-//         id,
-//         userId: req.user,
-//       },
-//     });
-
-//     if (!event) {
-//       return res.status(404).json({
-//         message: "Event not found or User not authorized",
-//       });
-//     }
-
-//     const updatedData: any = {};
-
-//     if (title) updatedData.title = title;
-//     if (description) updatedData.description = description;
-//     if (req.file?.path) updatedData.image = req.file?.path;
-//     if (date) updatedData.date = date;
-//     if (location) updatedData.location = location;
-
-//     if (ticketType) {
-//       try {
-//         const ticketTypeArray = typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
-
-//         if (Array.isArray(ticketTypeArray)) {
-//           updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
-//             ...ticket,
-//             sold: "0",
-//           }));
-//         } else {
-//           return res.status(400).json({ Error: "Invalid ticketType format" });
-//         }
-//       } catch (err) {
-//         return res.status(400).json({ Error: "Failed to parse ticketType" });
-//       }
-//     }
-
-//     if (Object.keys(updatedData).length === 0) {
-//       return res.status(400).json({ Error: "No valid fields to update" });
-//     }
-
-//     await EventInstance.update(updatedData, {
-//       where: { id },
-//     });
-
-//     const updatedEvent = await EventInstance.findOne({
-//       where: { id },
-//     });
-
-//     return res.status(200).json({
-//       message: "Event updated successfully",
-//       event: updatedEvent,
-//     });
-//   } catch (error: any) {
-//     return res.status(500).json({
-//       message: "Error updating event",
-//       error: error.message,
-//     });
-//   }
-// };
 export const updateEvent = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
   try {
     const { id } = req.params;
-    const fileUrl = req.file?.path;
 
     const { error, value } = updateEventValidationSchema.validate(req.body);
     if (error) {
@@ -225,7 +145,6 @@ export const updateEvent = async (
 
     const { title, description, date, location, ticketType } = value;
 
-    // Find the event to update
     const event = await EventInstance.findOne({
       where: {
         id,
@@ -239,12 +158,10 @@ export const updateEvent = async (
       });
     }
 
-    // Check if any ticket has a sold value greater than 0 in the event's current ticketType
     if (
       event.ticketType &&
       event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)
     ) {
-      // If a ticket has been sold, prevent the ticketType from being updated
       if (ticketType) {
         return res.status(400).json({
           message:
@@ -283,12 +200,10 @@ export const updateEvent = async (
       return res.status(400).json({ Error: "No valid fields to update" });
     }
 
-    // Update the event with the new data
     await EventInstance.update(updatedData, {
       where: { id },
     });
 
-    // Retrieve the updated event from the database
     const updatedEvent = await EventInstance.findOne({
       where: { id },
     });

@@ -30,10 +30,13 @@ export const resetPasswordExpireMinutes = parseInt(
 export const resetPasswordExpireUnit = process.env
   .RESET_PASSWORD_EXPIRE_UNIT! as string;
 export const CLOUDINARY_URL = process.env.CLOUDINARY_URL!;
-export const FLWPUBK = process.env.FLWPUBK!;
-export const FLWSECK = process.env.FLWSECK!;
+export const FLUTTERWAVE_PUBLIC_KEY = process.env.FLUTTERWAVE_PUBLIC_KEY!;
+export const FLUTTERWAVE_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY!;
 export const BASE_URL = process.env.BASE_URL!;
 export const FRONTEND_URL = process.env.FRONTEND_URL!;
+export const FLUTTERWAVE_BASE_URL = process.env.FLUTTERWAVE_BASE_URL!;
+export const ACCOUNT_ID = process.env.ACCOUNT_ID!;
+export const FLUUERWAVE_HASH_SECRET = process.env.FLUUERWAVE_HASH_SECRET!;
 
 export function generateRandomAlphaNumeric(length: any) {
   let result = "";

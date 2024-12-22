@@ -76,6 +76,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         companyWebsite,
         address,
         timezone,
+        country: "",
         userValidationSecret,
         otpVerificationExpiry,
         isVerified: false,
@@ -449,6 +450,7 @@ export const updateProfile = async (
       businessName,
       companyWebsite,
       address,
+      country,
       timezone,
     } = req.body;
 
@@ -479,6 +481,7 @@ export const updateProfile = async (
     if (companyWebsite) updateFields.companyWebsite = companyWebsite;
     if (address) updateFields.address = address;
     if (timezone) updateFields.timezone = timezone;
+    if (country) updateFields.country = country;
 
     if (Object.keys(updateFields).length === 0) {
       return res.status(400).json({ Error: "No valid fields to update" });

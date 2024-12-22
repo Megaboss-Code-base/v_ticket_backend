@@ -4,11 +4,12 @@ import logger from "morgan";
 import helmet from "helmet";
 import dotenv from "dotenv";
 
-import { db, port, URL } from "./config";
+import { db, FLUTTERWAVE_SECRET_KEY, port, URL } from "./config";
 import userRouter from "./routes/user";
 import eventRouter from "./routes/event";
 import ticketRouter from "./routes/ticket";
 import notificationRouter from "./routes//notification";
+import paymentRoutes from './routes/payment';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use("/api/v1/users", userRouter);
 app.use("/api/v1/events", eventRouter);
 app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/notifications", notificationRouter);
+app.use('/api/v1/payment', paymentRoutes);
 
 app.get("/", (req, res) => {
   res.send(`

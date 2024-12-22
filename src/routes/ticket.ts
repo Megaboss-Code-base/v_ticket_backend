@@ -5,20 +5,18 @@ import {
   cancelTicket,
   getEventTickets,
   getUserTickets,
-  paymentCallback,
-  processPayment,
+  handlePaymentRedirect,
   purchaseTicket,
-  validateTicket,
 } from "../controllers/ticketCtrl";
+import { processPayment } from "../utilities/flutterwave";
 
 const router = express.Router();
 
 router.post("/create-ticket/:eventId", auth, purchaseTicket);
-router.post("/create-ticket/:eventId", auth, processPayment);
 router.get("/my-tickets", auth, getUserTickets);
 router.delete("/:ticketId", auth, cancelTicket);
-router.patch("/:ticketId", auth, validateTicket);
 router.get("/events/:eventId/tickets", auth, getEventTickets);
-router.get("/callback", auth, paymentCallback);
+router.get("/payment-success", handlePaymentRedirect);
+router.post("/payment",auth, processPayment);
 
 export default router;

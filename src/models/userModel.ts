@@ -13,6 +13,7 @@ export interface UserAttribute {
   companyWebsite: string;
   address: string;
   timezone: string;
+  country: string;
   isVerified: boolean;
   userValidationSecret: string | null;
   otpVerificationExpiry: Date | null;
@@ -74,6 +75,10 @@ UserInstance.init(
       allowNull: true,
     },
     timezone: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    country: {
       type: DataTypes.STRING,
       allowNull: true,
     },

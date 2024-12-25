@@ -1,51 +1,55 @@
 import { Request, Response } from "express";
 import axios from "axios";
 import { TicketAttribute, TicketInstance } from "../models/ticketModel";
-import { UserAttribute, UserInstance } from "../models/userModel";
-import { JwtPayload } from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import { FLUTTERWAVE_SECRET_KEY,FLUUERWAVE_HASH_SECRET } from "../config";
+import { FLUTTERWAVE_BASE_URL, FLUTTERWAVE_SECRET_KEY, FLUUERWAVE_HASH_SECRET, FRONTEND_URL } from "../config";
+import TransactionInstance from "../models/transactionModel";
 
 const generateReference = () => `unique-ref-${Date.now()}`;
 
-export const createPaymentLink = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const userId = req.user;
+export const createPaymentLink = async (req: Request, res: Response): Promise<any> => {
+  if (!req.is("application/json")) {
+    return res.status(400).json({ error: "Invalid Content-Type. Expected application/json." });
+  }
+
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return res.status(400).json({ error: "Request body cannot be empty" });
+  }
+
   const tx_ref = generateReference();
   const { ticketId } = req.body;
 
-  if (!userId) {
-    return res.status(404).json({ message: "Please log in to create an event" });
+  if (!ticketId) {
+    return res.status(400).json({ error: "Missing required ticketId parameter" });
   }
 
-  // Find the user
-  const user = await UserInstance.findOne({ where: { id: userId } })as unknown as UserAttribute;
-  if (!user) {
-    return res.status(404).json({ error: "User not found or unauthorized" });
-  }
-
-  // Find the ticket
-  const ticket = await TicketInstance.findOne({ where: { id: ticketId, userId } }) as unknown as TicketAttribute;
-  if (!ticket) {
-    return res.status(404).json({ error: "Ticket not found or unauthorized" });
-  }
-  const paymentData = {
-    customer: {
-      email: user.email,
-    },
-    // email: user.email,
-    amount: ticket.price,
-    currency: ticket.currency,
-    tx_ref,
-    order_id: ticket.eventId,
-    redirect_url: "https://virtual-ticket-two.vercel.app/dashboard",
-  };
   try {
-    // Send request to Flutterwave API using axios
+    const ticket = (await TicketInstance.findOne({
+      where: { id: ticketId },
+    })) as unknown as TicketAttribute;
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    const paymentData = {
+      customer: {
+        email: ticket.email,
+      },
+      meta: {
+        ticketId: ticket.id,
+        eventId: ticket.eventId,
+        phone: ticket.phone,
+        fullName: ticket.fullName,
+      },
+      amount: ticket.price,
+      currency: ticket.currency,
+      tx_ref,
+      redirect_url: FRONTEND_URL,
+    };
+
     const response = await axios.post(
-      "https://api.flutterwave.com/v3/payments",
+      `${FLUTTERWAVE_BASE_URL}/payments`,
       paymentData,
       {
         headers: {
@@ -54,84 +58,103 @@ export const createPaymentLink = async (
         },
       }
     );
-    return res.status(200).json({ link: response.data.data.link });
 
-    // Check for successful response and return the payment link
-    // if (response.data.status === "success") {
-    //   return res.status(200).json({ link: response.data.link });
-    // } else {
-    //   return res.status(400).json({ message: "Error creating payment link" });
-    // }
+    if (response.data.status === "success") {
+      return res.status(200).json({ link: response.data.data.link });
+    } else {
+      return res.status(400).json({ message: "Error creating payment link" });
+    }
   } catch (error: any) {
     console.error("Error creating payment link:", error.message);
     return res.status(500).json({ message: "Error creating payment link" });
   }
 };
 
-
-export const handleWebhook = async (req: Request, res: Response):Promise<any> => {
+export const handleWebhook = async (req: Request, res: Response): Promise<any> => {
   try {
     const secretHash = FLUUERWAVE_HASH_SECRET;
-    console.log("Secret Hash:", secretHash);
-
-    // Extracting Flutterwave's signature from headers
     const signature = req.headers["verif-hash"] as string;
-    console.log("Signature from header:", signature);
-
+console.log("signature",signature)
     if (!signature || signature !== secretHash) {
-      return res.status(401).json({
-        error: "Invalid signature",
-      });
+      return res.status(401).json({ error: "Invalid signature" });
     }
-
-    // Accessing the payload
+    
     const payload = req.body;
-    console.log("Webhook payload:", payload);
+    console.log("payload",payload)
 
     if (payload.status === "successful") {
-      // Handle successful payment
       console.log("Payment successful:", payload);
 
-      // Example logic: update ticket status or process the payment
-      // const ticket = await TicketInstance.findOne({ where: { id: payload.ticketId } });
-      // if (ticket) {
-      //   await ticket.update({ status: "paid" });
-      // }
+      const { ticketId, eventId, phone, fullName, email } = payload.meta;
+      const totalAmount = payload.amount / 100;
+      const paymentReference = payload.flwRef;
+      const currency = payload.currency;
+
+      await TicketInstance.update(
+        {
+          validationStatus: "Valid",
+          paid: true,
+          phone,
+          fullName,
+          flwRef: paymentReference,
+        },
+        { where: { id: ticketId } }
+      );
+
+      await TransactionInstance.create({
+        id: uuidv4(),
+        email,
+        fullName,
+        ticketId,
+        totalAmount,
+        paymentStatus: "successful",
+        paymentReference,
+        currency,
+      });
+
+      return res.status(200).send("Webhook received and transaction processed successfully");
     }
 
-    // Respond to Flutterwave
-    res.status(200).send("Webhook received successfully");
+    return res.status(200).send("Webhook received successfully but payment was not successful");
   } catch (error: any) {
     console.error("Error handling webhook:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// Webhook payload: {
-  // id: 8285697,
-  // txRef: 'unique-ref-1734879018279',
-  // flwRef: 'FLW-MOCK-0fcd05e155096ed3d677076e379fc2e1',
-  // orderRef: 'URF_1734879062755_2544235',
-  // paymentPlan: null,
-  // paymentPage: null,
-  // createdAt: '2024-12-22T14:51:03.000Z',
-  // amount: 100,
-  // charged_amount: 100,
-  // status: 'successful',
-  // IP: '54.75.161.64',
-  // currency: 'NGN',
-  // appfee: 1.4,
-  // merchantfee: 0,
-  // merchantbearsfee: 1,
-  // charge_type: 'normal',
-  // customer: {
-  //   id: 2562211,
-  //   phone: null,
-  //   fullName: 'Anonymous customer',
-  //   customertoken: null,
-  //   email: 'terry966@gmail.com',
-  //   createdAt: '2024-12-22T14:51:02.000Z',
-  //   updatedAt: '2024-12-22T14:51:02.000Z',
-  //   deletedAt: null,
-  //   AccountId: 2567719
-  // },
+
+
+
+
+// export const handleWebhook = async (req: Request, res: Response): Promise<any> => {
+//   try {
+//     const secretHash = FLUUERWAVE_HASH_SECRET;
+//     const signature = req.headers["verif-hash"] as string;
+
+//     if (!signature || signature !== secretHash) {
+//       return res.status(401).json({ error: "Invalid signature" });
+//     }
+
+//     const payload = req.body;
+
+//     if (payload.status === "successful") {
+//       const { ticketId, eventId, phone, fullName } = payload.meta;
+
+//       await TicketInstance.update(
+//         {
+//           validationStatus: "Valid",
+//           paid: true,
+//           phone,
+//           fullName,
+//           flwRef: payload.flwRef,
+//         },
+//         { where: { id: ticketId } }
+//       );
+//     }
+
+//     res.status(200).send("Webhook received successfully");
+//   } catch (error: any) {
+//     console.error("Error handling webhook:", error.message);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// };

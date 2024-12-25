@@ -103,9 +103,3 @@ export const processPayment = async (req: JwtPayload, res: Response): Promise<vo
     res.status(500).json({ message: "Payment processing failed", error: error.message });
   }
 };
-
-
-/*
-eventOwnerId
-YOUR_SUB_ACCOUNT_ID
-*/

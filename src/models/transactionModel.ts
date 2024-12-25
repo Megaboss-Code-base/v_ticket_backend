@@ -7,14 +7,14 @@ import {
 } from "sequelize";
 import { db } from "../config";
 import { TicketInstance } from "./ticketModel";
-import { UserInstance } from "./userModel";
 
 export interface TransactionAttribute {
   id: string;
-  userId: string;
+  email: string;
+  fullName: string;
   ticketId: string;
   totalAmount: number;
-  paymentStatus: "Pending" | "Completed" | "Failed" | "Refunded";
+  paymentStatus: string;
   paymentReference: string;
   currency: string;
   createdAt: CreationOptional<Date>;
@@ -26,10 +26,11 @@ export class TransactionInstance extends Model<
   InferCreationAttributes<TransactionInstance>
 > {
   declare id: string;
-  declare userId: string;
+  declare email: string;
+  declare fullName: string;
   declare ticketId: string;
   declare totalAmount: number;
-  declare paymentStatus: "Pending" | "Completed" | "Failed" | "Refunded";
+  declare paymentStatus: string;
   declare paymentReference: string;
   declare currency: string;
   declare createdAt: CreationOptional<Date>;
@@ -44,8 +45,12 @@ TransactionInstance.init(
       allowNull: false,
       defaultValue: DataTypes.UUIDV4,
     },
-    userId: {
-      type: DataTypes.UUID,
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    fullName: {
+      type: DataTypes.STRING,
       allowNull: false,
     },
     ticketId: {
@@ -62,9 +67,8 @@ TransactionInstance.init(
       allowNull: false,
     },
     paymentStatus: {
-      type: DataTypes.ENUM("Pending", "Completed", "Failed", "Refunded"),
+      type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: "Pending",
     },
     paymentReference: {
       type: DataTypes.STRING,
@@ -91,15 +95,6 @@ TransactionInstance.init(
     timestamps: true,
   }
 );
-
-UserInstance.hasMany(TransactionInstance, {
-  foreignKey: "userId",
-  as: "transactions",
-});
-TransactionInstance.belongsTo(UserInstance, {
-  foreignKey: "userId",
-  as: "user",
-});
 
 TicketInstance.hasMany(TransactionInstance, {
   foreignKey: "ticketId",

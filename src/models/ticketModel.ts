@@ -1,12 +1,13 @@
 import { DataTypes, Model } from "sequelize";
 import { db } from "../config";
 import { EventInstance } from "./eventModel";
-import { UserInstance } from "./userModel";
 
 export interface TicketAttribute {
   id: string;
   eventId: string;
-  userId: string;
+  email: string;
+  phone: string;
+  fullName: string;
   ticketType: string;
   price: number;
   purchaseDate: Date;
@@ -32,8 +33,16 @@ TicketInstance.init(
       type: DataTypes.UUID,
       allowNull: false,
     },
-    userId: {
-      type: DataTypes.UUID,
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    phone: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    fullName: {
+      type: DataTypes.STRING,
       allowNull: false,
     },
     ticketType: {
@@ -84,6 +93,3 @@ TicketInstance.init(
 
 EventInstance.hasMany(TicketInstance, { foreignKey: "eventId", as: "tickets" });
 TicketInstance.belongsTo(EventInstance, { foreignKey: "eventId", as: "event" });
-
-UserInstance.hasMany(TicketInstance, { foreignKey: "userId", as: "tickets" });
-TicketInstance.belongsTo(UserInstance, { foreignKey: "userId", as: "user" });

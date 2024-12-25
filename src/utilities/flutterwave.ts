@@ -74,18 +74,18 @@ export const processPayment = async (req: JwtPayload, res: Response): Promise<vo
 
     const paymentData = response.data.data;
 
-    await TransactionInstance.create(
-      {
-        id: paymentData.tx_ref, // Ensure tx_ref is used as the ID for the transaction
-        userId,
-        ticketId,
-        totalAmount,
-        paymentStatus: paymentData.status === "success" ? "Completed" : "Failed",
-        paymentReference: paymentData.flw_ref,  // This should be extracted from the paymentData
-        currency: paymentData.currency,  // This should also come from the paymentData
-      },
-      { transaction }
-    );
+    // await TransactionInstance.create(
+    //   {
+    //     id: paymentData.tx_ref, // Ensure tx_ref is used as the ID for the transaction
+    //     userId,
+    //     ticketId,
+    //     totalAmount,
+    //     paymentStatus: paymentData.status === "success" ? "Completed" : "Failed",
+    //     paymentReference: paymentData.flw_ref,  // This should be extracted from the paymentData
+    //     currency: paymentData.currency,  // This should also come from the paymentData
+    //   },
+    //   { transaction }
+    // );
 
     await TicketInstance.update(
       { paid: true, validationStatus: "Valid" },

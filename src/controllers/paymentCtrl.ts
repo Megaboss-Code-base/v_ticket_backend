@@ -2,14 +2,24 @@ import { Request, Response } from "express";
 import axios from "axios";
 import { TicketAttribute, TicketInstance } from "../models/ticketModel";
 import { v4 as uuidv4 } from "uuid";
-import { FLUTTERWAVE_BASE_URL, FLUTTERWAVE_SECRET_KEY, FLUUERWAVE_HASH_SECRET, FRONTEND_URL } from "../config";
+import {
+  FLUTTERWAVE_BASE_URL,
+  FLUTTERWAVE_SECRET_KEY,
+  FLUUERWAVE_HASH_SECRET,
+  FRONTEND_URL,
+} from "../config";
 import TransactionInstance from "../models/transactionModel";
 
 const generateReference = () => `unique-ref-${Date.now()}`;
 
-export const createPaymentLink = async (req: Request, res: Response): Promise<any> => {
+export const createPaymentLink = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   if (!req.is("application/json")) {
-    return res.status(400).json({ error: "Invalid Content-Type. Expected application/json." });
+    return res
+      .status(400)
+      .json({ error: "Invalid Content-Type. Expected application/json." });
   }
 
   if (!req.body || Object.keys(req.body).length === 0) {
@@ -20,7 +30,9 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<an
   const { ticketId } = req.body;
 
   if (!ticketId) {
-    return res.status(400).json({ error: "Missing required ticketId parameter" });
+    return res
+      .status(400)
+      .json({ error: "Missing required ticketId parameter" });
   }
 
   try {
@@ -34,11 +46,11 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<an
 
     const paymentData = {
       customer: {
+        name: ticket.fullName,
         email: ticket.email,
       },
       meta: {
         ticketId: ticket.id,
-        eventId: ticket.eventId,
         phone: ticket.phone,
         fullName: ticket.fullName,
       },
@@ -58,9 +70,9 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<an
         },
       }
     );
-
     if (response.data.status === "success") {
-      return res.status(200).json({ link: response.data.data.link });
+      return res.status(200).json({ link: response.data.data.link, 
+      });
     } else {
       return res.status(400).json({ message: "Error creating payment link" });
     }
@@ -70,25 +82,26 @@ export const createPaymentLink = async (req: Request, res: Response): Promise<an
   }
 };
 
-export const handleWebhook = async (req: Request, res: Response): Promise<any> => {
+export const handleWebhook = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
     const secretHash = FLUUERWAVE_HASH_SECRET;
     const signature = req.headers["verif-hash"] as string;
-console.log("signature",signature)
+
     if (!signature || signature !== secretHash) {
       return res.status(401).json({ error: "Invalid signature" });
     }
-    
+
     const payload = req.body;
-    console.log("payload",payload)
 
-    if (payload.status === "successful") {
-      console.log("Payment successful:", payload);
-
-      const { ticketId, eventId, phone, fullName, email } = payload.meta;
-      const totalAmount = payload.amount / 100;
-      const paymentReference = payload.flwRef;
-      const currency = payload.currency;
+    if (payload.data.status === "successful") {
+      const { email } = payload.data.customer;
+      const { ticketId, phone, fullName } = payload.meta_data;
+      const totalAmount = payload.data.amount / 100;
+      const paymentReference = payload.data.flw_ref;
+      const currency = payload.data.currency;
 
       await TicketInstance.update(
         {
@@ -112,49 +125,12 @@ console.log("signature",signature)
         currency,
       });
 
-      return res.status(200).send("Webhook received and transaction processed successfully");
+      return res
+        .status(200)
+        .send("Webhook received and transaction processed successfully");
     }
-
-    return res.status(200).send("Webhook received successfully but payment was not successful");
   } catch (error: any) {
     console.error("Error handling webhook:", error.message);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-
-
-
-
-
-// export const handleWebhook = async (req: Request, res: Response): Promise<any> => {
-//   try {
-//     const secretHash = FLUUERWAVE_HASH_SECRET;
-//     const signature = req.headers["verif-hash"] as string;
-
-//     if (!signature || signature !== secretHash) {
-//       return res.status(401).json({ error: "Invalid signature" });
-//     }
-
-//     const payload = req.body;
-
-//     if (payload.status === "successful") {
-//       const { ticketId, eventId, phone, fullName } = payload.meta;
-
-//       await TicketInstance.update(
-//         {
-//           validationStatus: "Valid",
-//           paid: true,
-//           phone,
-//           fullName,
-//           flwRef: payload.flwRef,
-//         },
-//         { where: { id: ticketId } }
-//       );
-//     }
-
-//     res.status(200).send("Webhook received successfully");
-//   } catch (error: any) {
-//     console.error("Error handling webhook:", error.message);
-//     res.status(500).json({ error: "Internal server error" });
-//   }
-// };

@@ -17,6 +17,8 @@ export interface UserAttribute {
   isVerified: boolean;
   userValidationSecret: string | null;
   otpVerificationExpiry: Date | null;
+  account_bank: string | null; // New field
+  account_number: string | null; // New field
 }
 
 export class UserInstance extends Model<UserAttribute> {}
@@ -84,6 +86,14 @@ UserInstance.init(
     },
     otpVerificationExpiry: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    account_bank: { // New field
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    account_number: { // New field
+      type: DataTypes.STRING,
       allowNull: true,
     },
   },

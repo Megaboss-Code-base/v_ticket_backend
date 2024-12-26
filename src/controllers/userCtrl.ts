@@ -452,6 +452,8 @@ export const updateProfile = async (
       address,
       country,
       timezone,
+      account_bank,
+      account_number,
     } = req.body;
 
     const user = await UserInstance.findOne({
@@ -482,6 +484,8 @@ export const updateProfile = async (
     if (address) updateFields.address = address;
     if (timezone) updateFields.timezone = timezone;
     if (country) updateFields.country = country;
+    if (account_bank) updateFields.account_bank = account_bank;
+    if (account_number) updateFields.account_number = account_number;
 
     if (Object.keys(updateFields).length === 0) {
       return res.status(400).json({ Error: "No valid fields to update" });

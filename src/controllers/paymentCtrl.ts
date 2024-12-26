@@ -9,6 +9,8 @@ import {
   FRONTEND_URL,
 } from "../config";
 import TransactionInstance from "../models/transactionModel";
+import EventInstance from "../models/eventModel";
+import { UserAttribute, UserInstance } from "../models/userModel";
 
 const generateReference = () => `unique-ref-${Date.now()}`;
 
@@ -71,8 +73,7 @@ export const createPaymentLink = async (
       }
     );
     if (response.data.status === "success") {
-      return res.status(200).json({ link: response.data.data.link, 
-      });
+      return res.status(200).json({ link: response.data.data.link });
     } else {
       return res.status(400).json({ message: "Error creating payment link" });
     }
@@ -95,7 +96,6 @@ export const handleWebhook = async (
     }
 
     const payload = req.body;
-
     if (payload.data.status === "successful") {
       const { email } = payload.data.customer;
       const { ticketId, phone, fullName } = payload.meta_data;
@@ -132,5 +132,100 @@ export const handleWebhook = async (
   } catch (error: any) {
     console.error("Error handling webhook:", error.message);
     return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const createPaymentLinkForSplitAccount = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  if (!req.is("application/json")) {
+    return res
+      .status(400)
+      .json({ error: "Invalid Content-Type. Expected application/json." });
+  }
+
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return res.status(400).json({ error: "Request body cannot be empty" });
+  }
+
+  const tx_ref = generateReference();
+  const { ticketId } = req.body;
+
+  if (!ticketId) {
+    return res
+      .status(400)
+      .json({ error: "Missing required ticketId parameter" });
+  }
+
+  try {
+    const ticket = (await TicketInstance.findOne({
+      where: { id: ticketId },
+      include: [{ model: EventInstance, as: "event",      attributes: [ "userId"],
+      }],
+    })) as unknown as TicketAttribute & { event: EventInstance };
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    const eventOwner = await UserInstance.findOne({
+      where: {
+        id: ticket.event.userId,
+      },
+    }) as unknown as UserAttribute;
+
+    if (!eventOwner) {
+      return res.status(404).json({ error: "Event owner not found" });
+    }
+
+    const paymentData = {
+      customer: {
+        name: ticket.fullName,
+        email: ticket.email,
+      },
+      meta: {
+        ticketId: ticket.id,
+        phone: ticket.phone,
+        fullName: ticket.fullName,
+      },
+      amount: ticket.price,
+      currency: ticket.currency,
+      tx_ref,
+      redirect_url: FRONTEND_URL,
+      subaccounts: [
+        {
+          id: process.env.APP_OWNER_SUBACCOUNT_ID,
+          transaction_split_ratio: 10,
+        },
+        {
+          bank_account: {
+            account_bank: eventOwner.account_bank,
+            account_number: eventOwner.account_number,
+          },
+          country: eventOwner.country,
+          transaction_split_ratio: 90,
+        },
+      ],
+    };
+    const response = await axios.post(
+      `${FLUTTERWAVE_BASE_URL}/payments`,
+      paymentData,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.FLUTTERWAVE_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data.status === "success") {
+      return res.status(200).json({ link: response.data.data.link });
+    } else {
+      return res.status(400).json({ message: "Error creating payment link" });
+    }
+  } catch (error: any) {
+    console.error("Error creating payment link:", error.message);
+    return res.status(500).json({ message: "Error creating payment link" });
   }
 };

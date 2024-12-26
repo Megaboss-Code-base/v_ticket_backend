@@ -20,7 +20,7 @@ userRouter.post("/verify-otp", verifyOTP);
 userRouter.get("/resend-otp", resendVerificationOTP);
 userRouter.post("/login", login);
 userRouter.patch("/change-password", auth, changePassword);
-userRouter.patch("/password-recovery", auth, passwordRecovery);
+userRouter.patch("/password-recovery", passwordRecovery);
 userRouter.get("/profile", auth, getProfile);
 userRouter.patch("/profile", auth, updateProfile);
 userRouter.patch("/upload-image", auth, upload.single("file"), uploadPicture);

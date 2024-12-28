@@ -276,6 +276,9 @@ export const createEvent = async (
     return res.status(404).json({ message: "Please log in to create an event" });
   }
 
+  let galleryUrls: string[] = [];
+  let fileUrl: string | undefined = undefined;
+  
   try {
     const validateResult = eventValidationSchema.validate(req.body);
     if (validateResult.error) {
@@ -294,7 +297,6 @@ export const createEvent = async (
     const { title, description, date, venue, location, time } =
       validateResult.value;
 
-    let galleryUrls: string[] = [];
     if (req.files && Array.isArray(req.files)) {
       for (let file of req.files) {
         const uploadResult = await cloudinary.uploader.upload(file.path);
@@ -302,7 +304,7 @@ export const createEvent = async (
       }
     }
 
-    let fileUrl: string | undefined = galleryUrls[0];
+    fileUrl = galleryUrls[0]; 
 
     let socialMediaLinksObject: { [key: string]: string } | null = null;
     if (socialMediaLinks) {
@@ -332,11 +334,17 @@ export const createEvent = async (
       hostName: user.fullName,
     });
 
-    return res
-      .status(201)
-      .json({ message: "Event created successfully", event: newEvent });
+    return res.status(201).json({ message: "Event created successfully", event: newEvent });
+
   } catch (error: any) {
+    if (galleryUrls.length > 0) {
+      for (const url of galleryUrls) {
+        const publicId = url.split('/').pop()?.split('.')[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+    }
     return res.status(500).json({ message: "Error creating event", error: error.message });
   }
 };
-

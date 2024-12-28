@@ -57,8 +57,14 @@ export const eventValidationSchema = Joi.object({
   description: Joi.string().required(),
   date: Joi.date().required(),
   location: Joi.string().required(),
+  time: Joi.string().required(),
+  venue: Joi.string().required(),
   ticketType: Joi.string().required(), 
-});
+  socialMediaLinks: Joi.alternatives().try(
+    Joi.object().optional(),
+    Joi.string().optional()
+  ),
+  });
 
 export const updateEventValidationSchema = Joi.object({
   title: Joi.string().optional(),

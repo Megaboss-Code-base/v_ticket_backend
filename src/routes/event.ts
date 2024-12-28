@@ -14,7 +14,8 @@ import upload from "../utilities/multer";
 
 const router = express.Router();
 
-router.post("/create-event", auth, upload.single("file"), createEvent);
+router.post("/create-event", auth, upload.array("gallery", 10), createEvent);
+// router.post("/create-event", auth, upload.single("file"), createEvent);
 router.get("/all-events", getAllEvents);
 router.get("/my-events", auth, getAllMyEvents);
 router.get("/sorted-by-latest", getTrendingEvents);

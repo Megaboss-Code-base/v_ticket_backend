@@ -1,73 +1,16 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { EventInstance } from "../models/eventModel";
-import { UserInstance } from "../models/userModel";
+import { UserAttribute, UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
 import slugify from "slugify";
+import { v2 as cloudinary } from "cloudinary";
 
 import {
   eventValidationSchema,
   updateEventValidationSchema,
 } from "../utilities/validation";
 import { Op, Sequelize } from "sequelize";
-
-export const createEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const userId = req.user;
-  const fileUrl = req.file?.path;
-
-  if (!userId) {
-    return res
-      .status(404)
-      .json({ message: "Please log in to create an event" });
-  }
-
-  if (!fileUrl) {
-    return res.status(404).json({ message: "Please provide an image" });
-  }
-
-  try {
-    const validateResult = eventValidationSchema.validate(req.body);
-
-    if (validateResult.error) {
-      return res.status(400).json({
-        Error: validateResult.error.details[0].message,
-      });
-    }
-
-    const { ticketType } = validateResult.value;
-    const ticketTypeArray = JSON.parse(ticketType);
-
-    const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
-      ...ticket,
-      sold: "0",
-    }));
-
-    const { title, description, date, location } = validateResult.value;
-
-    const newEvent = await EventInstance.create({
-      id: uuidv4(),
-      title,
-      slug: slugify(String(title)),
-      description,
-      image: fileUrl,
-      date,
-      location,
-      ticketType: updatedTicketTypes,
-      userId,
-    });
-
-    return res
-      .status(201)
-      .json({ message: "Event created successfully", event: newEvent });
-  } catch (error: any) {
-    return res
-      .status(500)
-      .json({ message: "Error creating event", error: error.message });
-  }
-};
 
 export const getAllEvents = async (
   req: Request,
@@ -223,35 +166,6 @@ export const updateEvent = async (
   }
 };
 
-export const deleteEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  try {
-    const { id } = req.params;
-
-    const event = await EventInstance.findOne({
-      where: {
-        id: id,
-        userId: req.user,
-      },
-    });
-
-    if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not the right user" });
-    }
-
-    await event.destroy();
-    return res.status(200).json({ message: "Event deleted successfully" });
-  } catch (error: any) {
-    return res
-      .status(500)
-      .json({ message: "Error deleting event", error: error.message });
-  }
-};
-
 export const deleteExpiredEvents = async () => {
   try {
     const threeDaysAgo = new Date();
@@ -294,3 +208,135 @@ export const getTrendingEvents = async (
       .json({ message: "Error fetching events", error: error.message });
   }
 };
+
+export const deleteEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const { id } = req.params;
+
+    const event = await EventInstance.findOne({
+      where: {
+        id: id,
+        userId: req.user,
+      },
+    });
+
+    if (!event) {
+      return res
+        .status(404)
+        .json({ message: "Event not found or User not the right user" });
+    }
+
+    if (event.image) {
+      const imagePublicId = event.image
+        .split("/")
+        .slice(-2)
+        .join("/")
+        .split(".")[0];
+      if (imagePublicId) {
+        const result = await cloudinary.uploader.destroy(imagePublicId);
+        console.log(result);
+
+        if (result.result === "ok") {
+          console.log("Image deleted successfully.");
+        } else {
+          console.warn("Failed to delete image:", result);
+        }
+      } else {
+        console.warn("No public ID found for the image.");
+      }
+    } else {
+      console.warn("No image URL found for the event.");
+    }
+    await event.destroy();
+
+    return res
+      .status(200)
+      .json({ message: "Event and image deleted successfully" });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ message: "Error deleting event", error: error.message });
+  }
+};
+
+export const createEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { socialMediaLinks } = req.body;
+  const userId = req.user;
+  const user = (await UserInstance.findOne({
+    where: { id: userId },
+  })) as unknown as UserAttribute;
+
+  if (!user) {
+    return res.status(404).json({ message: "Please log in to create an event" });
+  }
+
+  try {
+    const validateResult = eventValidationSchema.validate(req.body);
+    if (validateResult.error) {
+      return res.status(400).json({
+        Error: validateResult.error.details[0].message,
+      });
+    }
+
+    const { ticketType } = validateResult.value;
+    const ticketTypeArray = JSON.parse(ticketType);
+    const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
+      ...ticket,
+      sold: "0",
+    }));
+
+    const { title, description, date, venue, location, time } =
+      validateResult.value;
+
+    let galleryUrls: string[] = [];
+    if (req.files && Array.isArray(req.files)) {
+      for (let file of req.files) {
+        const uploadResult = await cloudinary.uploader.upload(file.path);
+        galleryUrls.push(uploadResult.secure_url);
+      }
+    }
+
+    let fileUrl: string | undefined = galleryUrls[0];
+
+    let socialMediaLinksObject: { [key: string]: string } | null = null;
+    if (socialMediaLinks) {
+      try {
+        socialMediaLinksObject = JSON.parse(socialMediaLinks);
+      } catch (error) {
+        return res.status(400).json({
+          message: "Invalid format for social media links. Please send as a JSON object.",
+        });
+      }
+    }
+
+    const newEvent = await EventInstance.create({
+      id: uuidv4(),
+      title,
+      slug: slugify(String(title)),
+      description,
+      image: fileUrl,
+      date,
+      time,
+      venue,
+      location,
+      ticketType: updatedTicketTypes,
+      userId,
+      gallery: galleryUrls,
+      socialMediaLinks: socialMediaLinksObject,
+      hostName: user.fullName,
+    });
+
+    return res
+      .status(201)
+      .json({ message: "Event created successfully", event: newEvent });
+  } catch (error: any) {
+    return res.status(500).json({ message: "Error creating event", error: error.message });
+  }
+};
+

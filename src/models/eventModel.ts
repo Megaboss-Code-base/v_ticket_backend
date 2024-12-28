@@ -15,6 +15,7 @@ export class EventInstance extends Model<
 > {
   declare id: string;
   declare title: string;
+  declare slug: string;
   declare description: string;
   declare image: string | null;
   declare date: Date;
@@ -33,6 +34,10 @@ EventInstance.init(
       allowNull: false,
     },
     title: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    slug: {
       type: DataTypes.STRING,
       allowNull: false,
     },

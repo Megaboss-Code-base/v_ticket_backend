@@ -3,11 +3,13 @@ import { v4 as uuidv4 } from "uuid";
 import { EventInstance } from "../models/eventModel";
 import { UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
+import slugify from "slugify";
+
 import {
   eventValidationSchema,
   updateEventValidationSchema,
 } from "../utilities/validation";
-import { Sequelize } from "sequelize";
+import { Op, Sequelize } from "sequelize";
 
 export const createEvent = async (
   req: JwtPayload,
@@ -48,6 +50,7 @@ export const createEvent = async (
     const newEvent = await EventInstance.create({
       id: uuidv4(),
       title,
+      slug: slugify(String(title)),
       description,
       image: fileUrl,
       date,
@@ -249,52 +252,45 @@ export const deleteEvent = async (
   }
 };
 
-export const getEventsSortedBySoldQuantityRatio = async (
+export const deleteExpiredEvents = async () => {
+  try {
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    const deleted = await EventInstance.destroy({
+      where: {
+        date: {
+          [Op.lt]: threeDaysAgo,
+        },
+      },
+    });
+
+    console.log(`${deleted} expired events deleted.`);
+  } catch (error) {
+    console.error("Error deleting expired events:", error);
+  }
+};
+
+export const getTrendingEvents = async (
   req: Request,
   res: Response
 ): Promise<any> => {
   try {
-    const events = await EventInstance.findAll({
-      attributes: {
-        include: [
-          [
-            Sequelize.literal(
-              `(
-                SELECT MAX(CAST("sold" AS FLOAT) / NULLIF("quantity", 0))
-                FROM jsonb_array_elements("ticketType") AS ticket
-                WHERE ticket->>'sold' IS NOT NULL AND ticket->>'quantity' IS NOT NULL
-              )`
-            ),
-            "soldToQuantityRatio",
-          ],
-        ],
+    const trendingEvents = await EventInstance.findAll({
+      where: {
+        date: {
+          [Op.gte]: new Date(),
+        },
       },
-      order: [
-        [
-          Sequelize.literal(
-            `(
-              SELECT MAX(CAST("sold" AS FLOAT) / NULLIF("quantity", 0))
-              FROM jsonb_array_elements("ticketType") AS ticket
-              WHERE ticket->>'sold' IS NOT NULL AND ticket->>'quantity' IS NOT NULL
-            )`
-          ),
-          "DESC",
-        ],
-      ],
+      order: [["date", "ASC"]],
     });
-
-    if (!events || events.length === 0) {
-      return res.status(404).json({ message: "No events found" });
-    }
-
     return res.status(200).json({
-      counts: events.length,
-      events: events.map((event) => event.get({ plain: true })),
+      counts: trendingEvents.length,
+      events: trendingEvents,
     });
   } catch (error: any) {
-    return res.status(500).json({
-      message: "Error fetching events",
-      error: error.message,
-    });
+    return res
+      .status(500)
+      .json({ message: "Error fetching events", error: error.message });
   }
 };

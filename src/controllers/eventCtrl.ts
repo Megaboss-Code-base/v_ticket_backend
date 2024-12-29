@@ -273,12 +273,14 @@ export const createEvent = async (
   })) as unknown as UserAttribute;
 
   if (!user) {
-    return res.status(404).json({ message: "Please log in to create an event" });
+    return res
+      .status(404)
+      .json({ message: "Please log in to create an event" });
   }
 
   let galleryUrls: string[] = [];
   let fileUrl: string | undefined = undefined;
-  
+
   try {
     const validateResult = eventValidationSchema.validate(req.body);
     if (validateResult.error) {
@@ -304,7 +306,21 @@ export const createEvent = async (
       }
     }
 
-    fileUrl = galleryUrls[0]; 
+    fileUrl = galleryUrls[0];
+
+    if (!fileUrl) {
+      if (galleryUrls.length > 0) {
+        for (const url of galleryUrls) {
+          const publicId = url.split("/").pop()?.split(".")[0];
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+          }
+        }
+      }
+      return res
+        .status(400)
+        .json({ message: "Please provide an image for the event." });
+    }
 
     let socialMediaLinksObject: { [key: string]: string } | null = null;
     if (socialMediaLinks) {
@@ -312,7 +328,8 @@ export const createEvent = async (
         socialMediaLinksObject = JSON.parse(socialMediaLinks);
       } catch (error) {
         return res.status(400).json({
-          message: "Invalid format for social media links. Please send as a JSON object.",
+          message:
+            "Invalid format for social media links. Please send as a JSON object.",
         });
       }
     }
@@ -320,7 +337,7 @@ export const createEvent = async (
     const newEvent = await EventInstance.create({
       id: uuidv4(),
       title,
-      slug: slugify(String(title)),
+      slug: slugify(String(title)).toLowerCase(),
       description,
       image: fileUrl,
       date,
@@ -334,17 +351,20 @@ export const createEvent = async (
       hostName: user.fullName,
     });
 
-    return res.status(201).json({ message: "Event created successfully", event: newEvent });
-
+    return res
+      .status(201)
+      .json({ message: "Event created successfully", event: newEvent });
   } catch (error: any) {
     if (galleryUrls.length > 0) {
       for (const url of galleryUrls) {
-        const publicId = url.split('/').pop()?.split('.')[0];
+        const publicId = url.split("/").pop()?.split(".")[0];
         if (publicId) {
           await cloudinary.uploader.destroy(publicId);
         }
       }
     }
-    return res.status(500).json({ message: "Error creating event", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Error creating event", error: error.message });
   }
 };

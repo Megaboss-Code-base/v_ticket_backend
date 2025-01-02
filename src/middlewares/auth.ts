@@ -38,3 +38,30 @@ export const auth = async (
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 };
+
+export const adminAuth = async (
+  req: any,
+  res: Response,
+  next: NextFunction
+): Promise<any> => {
+  try {
+    const user = (await UserInstance.findOne({
+      where: { id: req.user },
+    })) as unknown as UserAttribute;
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "admin") {
+      return res.status(403).json({ error: "Access denied. Admins only." });
+    }
+
+    next();
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "An error occurred during role verification",
+      details: error.message,
+    });
+  }
+};

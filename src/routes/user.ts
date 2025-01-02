@@ -1,6 +1,7 @@
 import express from "express";
 import {
   changePassword,
+  getMonthlyRegistrations,
   getProfile,
   login,
   passwordRecovery,
@@ -10,7 +11,7 @@ import {
   uploadPicture,
   verifyOTP,
 } from "../controllers/userCtrl";
-import { auth } from "../middlewares/auth";
+import { adminAuth, auth } from "../middlewares/auth";
 import upload from "../utilities/multer";
 
 const userRouter = express.Router();
@@ -24,4 +25,6 @@ userRouter.patch("/password-recovery", passwordRecovery);
 userRouter.get("/profile", auth, getProfile);
 userRouter.patch("/profile", auth, updateProfile);
 userRouter.patch("/upload-image", auth, upload.single("file"), uploadPicture);
+userRouter.get("/registrations/monthly",auth, adminAuth, getMonthlyRegistrations);
+
 export default userRouter;

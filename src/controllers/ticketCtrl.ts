@@ -1,11 +1,18 @@
 import { Request, Response } from "express";
 import { EventInstance } from "../models/eventModel";
-import { TicketInstance } from "../models/ticketModel";
+import { TicketAttribute, TicketInstance } from "../models/ticketModel";
 import { v4 as uuidv4 } from "uuid";
 import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
 import { JwtPayload } from "jsonwebtoken";
 import sendEmail from "../utilities/sendMail";
+import { ModeratorInstance } from "../models/moderatorModel";
+import { UserAttribute, UserInstance } from "../models/userModel";
+import sharp from "sharp";
+
+// @ts-ignore
+const QRCodeReader = require("qrcode-reader");
+// const {Jimp} = require("jimp");
 
 export const getEventTickets = async (
   req: JwtPayload,
@@ -65,13 +72,13 @@ export const purchaseTicket = async (
     const ticketId = uuidv4();
     const qrCodeData = {
       ticketId,
-      email,
-      phone,
-      fullName,
+      // email,
+      // phone,
+      // fullName,
       eventId: event.id,
-      ticketType,
-      price: ticketPrice,
-      purchaseDate: new Date(),
+      // ticketType,
+      // price: ticketPrice,
+      // purchaseDate: new Date(),
     };
 
     const qrCode = await QRCode.toDataURL(JSON.stringify(qrCodeData));
@@ -103,7 +110,9 @@ export const purchaseTicket = async (
     const mailMessage = `
       Dear ${fullName},
       
-      Thank you for purchasing a ${ticketType} ticket for the event "${event.title}".
+      Thank you for purchasing a ${ticketType} ticket for the event "${
+      event.title
+    }".
       Here are your ticket details:
       
       - Event: ${event.title}
@@ -131,7 +140,8 @@ export const purchaseTicket = async (
     });
 
     return res.status(201).json({
-      message: "Ticket created successfully. An email has been sent to confirm.",
+      message:
+        "Ticket created successfully. An email has been sent to confirm.",
       ticket: newTicket,
     });
   } catch (error: any) {
@@ -141,7 +151,6 @@ export const purchaseTicket = async (
     });
   }
 };
-
 
 export const cancelTicket = async (
   req: Request,
@@ -161,3 +170,235 @@ export const cancelTicket = async (
       .json({ error: "Failed to cancel ticket", details: error.message });
   }
 };
+// export const validateTicket = async (
+//   req: JwtPayload,
+//   res: Response
+// ): Promise<any> => {
+//   const { eventId } = req.params;
+//   const moderatorId = req.user;
+//   const file = req.file;
+
+//   try {
+//     const isUser = (await UserInstance.findOne({
+//       where: { id: moderatorId },
+//     })) as unknown as UserAttribute;
+
+//     const isModerator = await ModeratorInstance.findOne({
+//       where: { eventId, userEmail: isUser.email },
+//     });
+//     if (!isModerator) {
+//       return res.status(403).json({
+//         error: "You are not authorized to validate tickets for this event.",
+//       });
+//     }
+
+//     if (!file) {
+//       return res.status(400).json({ error: "QR code image is required." });
+//     }
+
+//     const image = await Jimp.read(file.path);
+//     const qr = new QRCodeReader();
+
+//     const decodedData = await new Promise<string>((resolve, reject) => {
+//       qr.callback = (err: any, value: any) => {
+//         if (err) return reject(err);
+//         resolve(value.result);
+//       };
+//       qr.decode(image.bitmap);
+//     });
+
+//     const { ticketId } = JSON.parse(decodedData);
+
+//     const ticket = (await TicketInstance.findOne({
+//       where: { id: ticketId, eventId },
+//     })) as unknown as TicketAttribute;
+
+//     if (!ticket) {
+//       return res.status(404).json({ error: "Ticket not found." });
+//     }
+
+//     if (ticket.validationStatus !== "Valid") {
+//       return res
+//         .status(400)
+//         .json({ error: "This ticket has already been used or is invalid." });
+//     }
+
+//     const updatedTicket = await TicketInstance.update(
+//       { validationStatus: "Used" },
+//       { where: { id: ticketId } }
+//     );
+
+//     return res.status(200).json({
+//       message: "Ticket validated successfully.",
+//       ticket: updatedTicket,
+//     });
+//   } catch (error: any) {
+//     return res.status(500).json({ error: error.message });
+//   }
+// };
+
+// export const validateTicket = async (
+//   req: JwtPayload,
+//   res: Response
+// ): Promise<any> => {
+//   const { eventId } = req.params;
+//   const moderatorId = req.user;
+//   const file = req.file;
+
+//   try {
+//     const isUser = (await UserInstance.findOne({
+//       where: { id: moderatorId },
+//     })) as unknown as UserAttribute;
+
+//     const isModerator = await ModeratorInstance.findOne({
+//       where: { eventId, userEmail: isUser.email },
+//     });
+//     if (!isModerator) {
+//       return res.status(403).json({
+//         error: "You are not authorized to validate tickets for this event.",
+//       });
+//     }
+
+//     if (!file) {
+//       return res.status(400).json({ error: "QR code image is required." });
+//     }
+
+//     const image = await Jimp.read(file.path); // Ensure Jimp.read is correctly called
+//     // Convert to grayscale
+//     image.grayscale();
+
+//     // Enhance contrast
+//     image.contrast(1);
+
+//     // Resize to improve readability (optional)
+//     image.resize(300, 300);
+
+//     const qr = new QRCodeReader();
+//     const decodedData = await new Promise<string>((resolve, reject) => {
+//       qr.callback = (err: any, value: any) => {
+//         if (err) return reject(err);
+//         resolve(value.result);
+//       };
+//       qr.decode(image.bitmap);
+//     });
+
+//     const { ticketId } = JSON.parse(decodedData);
+
+//     const ticket = (await TicketInstance.findOne({
+//       where: { id: ticketId, eventId },
+//     })) as unknown as TicketAttribute;
+//     if (!ticket) {
+//       return res.status(404).json({ error: "Ticket not found." });
+//     }
+
+//     if (ticket.validationStatus !== "Valid") {
+//       return res
+//         .status(400)
+//         .json({ error: "This ticket has already been used or is invalid." });
+//     }
+
+//     const updatedTicket = await TicketInstance.update(
+//       { validationStatus: "Used" },
+//       { where: { id: ticketId } }
+//     );
+
+//     return res.status(200).json({
+//       message: "Ticket validated successfully.",
+//       ticket: updatedTicket,
+//     });
+//   } catch (error: any) {
+//     console.error("Error validating ticket:", error); // Log the error
+//     return res
+//       .status(500)
+//       .json({ error: "Internal server error", details: error.message });
+//   }
+// };
+
+
+
+export const validateTicket = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { eventId } = req.params;
+  const moderatorId = req.user;
+  const file = req.file;
+
+  try {
+    // Check if the user is authorized to validate tickets
+    const isUser = (await UserInstance.findOne({
+      where: { id: moderatorId },
+    })) as unknown as UserAttribute;
+
+    const isModerator = await ModeratorInstance.findOne({
+      where: { eventId, userEmail: isUser.email },
+    });
+
+    if (!isModerator) {
+      return res.status(403).json({
+        error: "You are not authorized to validate tickets for this event.",
+      });
+    }
+
+    // Ensure a file is uploaded
+    if (!file) {
+      return res.status(400).json({ error: "QR code image is required." });
+    }
+
+    // Process the image with Sharp
+    const imageBuffer = await sharp(file.path)
+      .resize(300, 300) // Resize to improve readability
+      .toBuffer();
+
+    // Ensure the image buffer has width and height (check if the buffer is valid)
+    const { width, height } = await sharp(imageBuffer).metadata();
+    if (!width || !height) {
+      return res.status(400).json({ error: "Invalid image format." });
+    }
+
+    // Decode the QR code using QRCodeReader
+    const qr = new QRCodeReader();
+    const decodedData = await new Promise<string>((resolve, reject) => {
+      qr.callback = (err: any, value: any) => {
+        if (err) return reject(err);
+        resolve(value.result);
+      };
+      qr.decode(imageBuffer); // Pass the image buffer to the QR code reader
+    });
+
+    // Parse the QR code data
+    const { ticketId } = JSON.parse(decodedData);
+
+    // Validate the ticket
+    const ticket = await TicketInstance.findOne({
+      where: { id: ticketId, eventId },
+    }) as unknown as TicketAttribute;
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found." });
+    }
+
+    if (ticket.validationStatus !== "Valid") {
+      return res
+        .status(400)
+        .json({ error: "This ticket has already been used or is invalid." });
+    }
+
+    // Update the ticket status to "Used"
+    const updatedTicket = await TicketInstance.update(
+      { validationStatus: "Used" },
+      { where: { id: ticketId } }
+    );
+
+    return res.status(200).json({
+      message: "Ticket validated successfully.",
+      ticket: updatedTicket,
+    });
+  } catch (error: any) {
+    console.error("Error validating ticket:", error); // Log the error
+    return res
+      .status(500)
+      .json({ error: "Internal server error", details: error.message });
+  }
+};
+

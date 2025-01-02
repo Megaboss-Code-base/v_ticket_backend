@@ -6,6 +6,8 @@ import bcrypt from "bcryptjs";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import dayjs, { ManipulateType } from "dayjs";
+import { Sequelize } from "sequelize";
+
 import {
   db,
   EXPIRESIN,
@@ -80,6 +82,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         userValidationSecret,
         otpVerificationExpiry,
         isVerified: false,
+        totalEarnings: 0,
       },
       { transaction }
     );
@@ -535,5 +538,28 @@ export const uploadPicture = async (
       Error: `Internal server error: ${error.message}`,
       route: "users/upload-image",
     });
+  }
+};
+
+export const getMonthlyRegistrations = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const registrations = await UserInstance.findAll({
+      attributes: [
+        [Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")), "month"],
+        [Sequelize.fn("COUNT", Sequelize.col("id")), "totalRegistrations"],
+      ],
+      group: [Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt"))],
+      order: [[Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")), "ASC"]],
+    });
+
+    const formattedData = registrations.map((record: any) => ({
+      month: record.getDataValue("month"),
+      totalRegistrations: record.getDataValue("totalRegistrations"),
+    }));
+
+    return res.status(200).json({ data: formattedData });
+  } catch (error: any) {
+    console.error("Error fetching monthly registrations:", error.message);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

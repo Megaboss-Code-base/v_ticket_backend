@@ -11,6 +11,7 @@ import {
   updateEventValidationSchema,
 } from "../utilities/validation";
 import { Op, Sequelize } from "sequelize";
+import { ModeratorInstance } from "../models/moderatorModel";
 
 export const getAllEvents = async (
   req: Request,
@@ -366,5 +367,39 @@ export const createEvent = async (
     return res
       .status(500)
       .json({ message: "Error creating event", error: error.message });
+  }
+};
+
+export const assignModerator = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { eventId, userEmail } = req.body;
+  const ownerId = req.user;
+
+  try {
+    const event = await EventInstance.findOne({
+      where: { id: eventId, userId: ownerId },
+    });
+    if (!event) {
+      return res
+        .status(403)
+        .json({
+          error: "You are not authorized to assign moderators for this event.",
+        });
+    }
+
+    const moderator = await ModeratorInstance.create({
+      id: uuidv4(),
+      eventId,
+      userEmail,
+    });
+
+    return res.status(201).json({
+      message: "Moderator assigned successfully.",
+      moderator,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 };

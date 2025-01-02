@@ -106,3 +106,4 @@ TransactionInstance.belongsTo(TicketInstance, {
 });
 
 export default TransactionInstance;
+

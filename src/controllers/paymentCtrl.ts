@@ -83,57 +83,57 @@ export const createPaymentLink = async (
   }
 };
 
-export const handleWebhook = async (
-  req: Request,
-  res: Response
-): Promise<any> => {
-  try {
-    const secretHash = FLUUERWAVE_HASH_SECRET;
-    const signature = req.headers["verif-hash"] as string;
+// export const handleWebhook = async (
+//   req: Request,
+//   res: Response
+// ): Promise<any> => {
+//   try {
+//     const secretHash = FLUUERWAVE_HASH_SECRET;
+//     const signature = req.headers["verif-hash"] as string;
 
-    if (!signature || signature !== secretHash) {
-      return res.status(401).json({ error: "Invalid signature" });
-    }
+//     if (!signature || signature !== secretHash) {
+//       return res.status(401).json({ error: "Invalid signature" });
+//     }
 
-    const payload = req.body;
-    if (payload.data.status === "successful") {
-      const { email } = payload.data.customer;
-      const { ticketId, phone, fullName } = payload.meta_data;
-      const totalAmount = payload.data.amount / 100;
-      const paymentReference = payload.data.flw_ref;
-      const currency = payload.data.currency;
+//     const payload = req.body;
+//     if (payload.data.status === "successful") {
+//       const { email } = payload.data.customer;
+//       const { ticketId, phone, fullName } = payload.meta_data;
+//       const totalAmount = payload.data.amount / 100;
+//       const paymentReference = payload.data.flw_ref;
+//       const currency = payload.data.currency;
 
-      await TicketInstance.update(
-        {
-          validationStatus: "Valid",
-          paid: true,
-          phone,
-          fullName,
-          flwRef: paymentReference,
-        },
-        { where: { id: ticketId } }
-      );
+//       await TicketInstance.update(
+//         {
+//           validationStatus: "Valid",
+//           paid: true,
+//           phone,
+//           fullName,
+//           flwRef: paymentReference,
+//         },
+//         { where: { id: ticketId } }
+//       );
 
-      await TransactionInstance.create({
-        id: uuidv4(),
-        email,
-        fullName,
-        ticketId,
-        totalAmount,
-        paymentStatus: "successful",
-        paymentReference,
-        currency,
-      });
+//       await TransactionInstance.create({
+//         id: uuidv4(),
+//         email,
+//         fullName,
+//         ticketId,
+//         totalAmount,
+//         paymentStatus: "successful",
+//         paymentReference,
+//         currency,
+//       });
 
-      return res
-        .status(200)
-        .send("Webhook received and transaction processed successfully");
-    }
-  } catch (error: any) {
-    console.error("Error handling webhook:", error.message);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
+//       return res
+//         .status(200)
+//         .send("Webhook received and transaction processed successfully");
+//     }
+//   } catch (error: any) {
+//     console.error("Error handling webhook:", error.message);
+//     return res.status(500).json({ error: "Internal server error" });
+//   }
+// };
 
 export const createPaymentLinkForSplitAccount = async (
   req: Request,
@@ -161,19 +161,18 @@ export const createPaymentLinkForSplitAccount = async (
   try {
     const ticket = (await TicketInstance.findOne({
       where: { id: ticketId },
-      include: [{ model: EventInstance, as: "event",      attributes: [ "userId"],
-      }],
+      include: [{ model: EventInstance, as: "event", attributes: ["userId"] }],
     })) as unknown as TicketAttribute & { event: EventInstance };
 
     if (!ticket) {
       return res.status(404).json({ error: "Ticket not found" });
     }
 
-    const eventOwner = await UserInstance.findOne({
+    const eventOwner = (await UserInstance.findOne({
       where: {
         id: ticket.event.userId,
       },
-    }) as unknown as UserAttribute;
+    })) as unknown as UserAttribute;
 
     if (!eventOwner) {
       return res.status(404).json({ error: "Event owner not found" });
@@ -227,5 +226,66 @@ export const createPaymentLinkForSplitAccount = async (
   } catch (error: any) {
     console.error("Error creating payment link:", error.message);
     return res.status(500).json({ message: "Error creating payment link" });
+  }
+};
+
+export const handleWebhook = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  try {
+    const secretHash = process.env.FLUUERWAVE_HASH_SECRET;
+    const signature = req.headers["verif-hash"] as string;
+
+    if (!signature || signature !== secretHash) {
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
+    const payload = req.body;
+    if (payload.data.status === "successful") {
+      const { email } = payload.data.customer;
+      const { ticketId, phone, fullName } = payload.meta_data;
+      const totalAmount = payload.data.amount;
+      const paymentReference = payload.data.flw_ref;
+
+      const appOwnerSplit = (totalAmount * 9.85) / 100;
+      const currency = payload.data.currency;
+
+      await TicketInstance.update(
+        {
+          validationStatus: "Valid",
+          paid: true,
+          flwRef: paymentReference,
+        },
+        { where: { id: ticketId } }
+      );
+
+      await TransactionInstance.create({
+        id: uuidv4(),
+        email,
+        fullName,
+        ticketId,
+        totalAmount,
+        paymentStatus: "successful",
+        paymentReference,
+        currency,
+      });
+      const myId = "d9e4530b-0ee5-4803-8c22-d37934a80a7e";
+      // const myId = process.env.ACCOUNT_OWNER_ID;
+      console.log("myId", myId);
+      await UserInstance.increment("totalEarnings", {
+        by: appOwnerSplit,
+        where: { id: myId },
+      });
+
+      return res
+        .status(200)
+        .send("Webhook received and transaction processed successfully");
+    } else {
+      return res.status(400).json({ error: "Payment was not successful" });
+    }
+  } catch (error: any) {
+    console.error("Error handling webhook:", error.message);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

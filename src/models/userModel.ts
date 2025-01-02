@@ -1,5 +1,5 @@
-import { DataTypes, Model } from 'sequelize';
-import { db } from '../config';
+import { DataTypes, Model } from "sequelize";
+import { db } from "../config";
 
 export interface UserAttribute {
   id: string;
@@ -7,7 +7,7 @@ export interface UserAttribute {
   email: string;
   password: string;
   profilePic: string;
-  role: string;
+  role: "user" | "admin";
   phone: string;
   businessName: string;
   companyWebsite: string;
@@ -17,8 +17,9 @@ export interface UserAttribute {
   isVerified: boolean;
   userValidationSecret: string | null;
   otpVerificationExpiry: Date | null;
-  account_bank: string | null; // New field
-  account_number: string | null; // New field
+  account_bank: string | null;
+  account_number: string | null;
+  totalEarnings: number;
 }
 
 export class UserInstance extends Model<UserAttribute> {}
@@ -52,8 +53,9 @@ UserInstance.init(
       allowNull: true,
     },
     role: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: DataTypes.ENUM("user", "admin"),
+      allowNull: false,
+      defaultValue: "user",
     },
     businessName: {
       type: DataTypes.STRING,
@@ -88,17 +90,22 @@ UserInstance.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
-    account_bank: { // New field
+    account_bank: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    account_number: { // New field
+    account_number: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    totalEarnings: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
     },
   },
   {
     sequelize: db,
-    tableName: 'users',
+    tableName: "users",
   }
 );

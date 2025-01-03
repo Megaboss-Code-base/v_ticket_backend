@@ -7,7 +7,7 @@ export const getUserNotifications = async (
   res: Response
 ): Promise<any> => {
   try {
-    const { userId } = req.params;
+    const userId = req.user;
 
     if (!userId) {
       return res
@@ -39,7 +39,8 @@ export const markNotificationAsRead = async (
   res: Response
 ): Promise<any> => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.user;
 
     if (!userId) {
       return res
@@ -78,7 +79,8 @@ export const deleteNotification = async (
   res: Response
 ): Promise<any> => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.user;
 
     if (!userId) {
       return res.status(401).json({

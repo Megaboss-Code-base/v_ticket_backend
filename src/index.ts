@@ -5,7 +5,7 @@ import helmet from "helmet";
 import dotenv from "dotenv";
 import cron from "node-cron";
 
-import { db, FLUTTERWAVE_SECRET_KEY, port, URL } from "./config";
+import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
 import eventRouter from "./routes/event";
 import ticketRouter from "./routes/ticket";
@@ -37,7 +37,11 @@ app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/payment", paymentRoutes);
 
-cron.schedule("0 0 * * *", async () => {
+// cron.schedule("0 0 * * *", async () => {
+//   console.log("Running daily cleanup for expired events...");
+//   await deleteExpiredEvents();
+// });
+cron.schedule("* * * * *", async () => {
   console.log("Running daily cleanup for expired events...");
   await deleteExpiredEvents();
 });

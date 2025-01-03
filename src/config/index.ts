@@ -37,6 +37,7 @@ export const FRONTEND_URL = process.env.FRONTEND_URL!;
 export const FLUTTERWAVE_BASE_URL = process.env.FLUTTERWAVE_BASE_URL!;
 export const ACCOUNT_ID = process.env.ACCOUNT_ID!;
 export const FLUUERWAVE_HASH_SECRET = process.env.FLUUERWAVE_HASH_SECRET!;
+export const ACCOUNT_OWNER_ID = process.env.ACCOUNT_OWNER_ID! as string;
 
 export function generateRandomAlphaNumeric(length: any) {
   let result = "";

@@ -4,14 +4,15 @@ import { EventInstance } from "../models/eventModel";
 import { UserAttribute, UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
 import slugify from "slugify";
-import { v2 as cloudinary } from "cloudinary";
+import { v2 as cloudinary } from "cloudinary"; // Correct import
 
 import {
   eventValidationSchema,
   updateEventValidationSchema,
 } from "../utilities/validation";
-import { Op, Sequelize } from "sequelize";
+import { Op } from "sequelize";
 import { ModeratorInstance } from "../models/moderatorModel";
+import { NotificationInstance } from "../models/notificationModel";
 
 export const getAllEvents = async (
   req: Request,
@@ -167,24 +168,24 @@ export const updateEvent = async (
   }
 };
 
-export const deleteExpiredEvents = async () => {
-  try {
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+// export const deleteExpiredEvents = async () => {
+//   try {
+//     const threeDaysAgo = new Date();
+//     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
-    const deleted = await EventInstance.destroy({
-      where: {
-        date: {
-          [Op.lt]: threeDaysAgo,
-        },
-      },
-    });
+//     const deleted = await EventInstance.destroy({
+//       where: {
+//         date: {
+//           [Op.lt]: threeDaysAgo,
+//         },
+//       },
+//     });
 
-    console.log(`${deleted} expired events deleted.`);
-  } catch (error) {
-    console.error("Error deleting expired events:", error);
-  }
-};
+//     console.log(`${deleted} expired events deleted.`);
+//   } catch (error) {
+//     console.error("Error deleting expired events:", error);
+//   }
+// };
 
 export const getTrendingEvents = async (
   req: Request,
@@ -207,59 +208,6 @@ export const getTrendingEvents = async (
     return res
       .status(500)
       .json({ message: "Error fetching events", error: error.message });
-  }
-};
-
-export const deleteEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  try {
-    const { id } = req.params;
-
-    const event = await EventInstance.findOne({
-      where: {
-        id: id,
-        userId: req.user,
-      },
-    });
-
-    if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not the right user" });
-    }
-
-    if (event.image) {
-      const imagePublicId = event.image
-        .split("/")
-        .slice(-2)
-        .join("/")
-        .split(".")[0];
-      if (imagePublicId) {
-        const result = await cloudinary.uploader.destroy(imagePublicId);
-        console.log(result);
-
-        if (result.result === "ok") {
-          console.log("Image deleted successfully.");
-        } else {
-          console.warn("Failed to delete image:", result);
-        }
-      } else {
-        console.warn("No public ID found for the image.");
-      }
-    } else {
-      console.warn("No image URL found for the event.");
-    }
-    await event.destroy();
-
-    return res
-      .status(200)
-      .json({ message: "Event and image deleted successfully" });
-  } catch (error: any) {
-    return res
-      .status(500)
-      .json({ message: "Error deleting event", error: error.message });
   }
 };
 
@@ -382,11 +330,9 @@ export const assignModerator = async (
       where: { id: eventId, userId: ownerId },
     });
     if (!event) {
-      return res
-        .status(403)
-        .json({
-          error: "You are not authorized to assign moderators for this event.",
-        });
+      return res.status(403).json({
+        error: "You are not authorized to assign moderators for this event.",
+      });
     }
 
     const moderator = await ModeratorInstance.create({
@@ -401,5 +347,140 @@ export const assignModerator = async (
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+};
+
+export const deleteEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const { adminMessage } = req.body;
+
+    const event = await EventInstance.findOne({ where: { id } });
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    const myTitle = event.title;
+
+    const user = (await UserInstance.findOne({
+      where: { id: req.user },
+    })) as unknown as UserAttribute;
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (event.userId !== req.user && user.role !== "admin") {
+      return res.status(403).json({
+        message:
+          "Access denied. Only the event owner or an admin can delete this event.",
+      });
+    }
+
+    if (event.image) {
+      try {
+        const publicId = event.image
+          .split("/upload/")[1]
+          .split("/")
+          .slice(1)
+          .join("/")
+          .split(".")[0];
+
+        if (publicId) {
+          const result = await cloudinary.uploader.destroy(publicId, {
+            invalidate: true,
+            resource_type: "image",
+          });
+
+          if (result.result === "not found") {
+            return res.status(404).json({
+              message: "Image not found on Cloudinary. Event not deleted.",
+              error: result,
+            });
+          }
+
+          if (result.result !== "ok") {
+            return res.status(500).json({
+              message: "Failed to delete associated image. Event not deleted.",
+              error: result,
+            });
+          }
+        } else {
+          return res.status(400).json({
+            message:
+              "No valid public ID found for the image. Event not deleted.",
+          });
+        }
+      } catch (error: any) {
+        console.error("Error deleting image from Cloudinary:", error.message);
+        return res.status(500).json({
+          message: "Error deleting associated image. Event not deleted.",
+          error: error.message,
+        });
+      }
+    } else {
+      return res.status(400).json({
+        message: "No image associated with the event. Event not deleted.",
+      });
+    }
+
+    await event.destroy();
+
+    let responseMessage = "Event and associated image deleted successfully";
+    if (user.role === "admin" && adminMessage) {
+      responseMessage += `. Admin Message: ${adminMessage}`;
+
+      await NotificationInstance.create({
+        id: uuidv4(),
+        title: `${myTitle} has been deleted`,
+        message: `${responseMessage}`,
+        userId: event.userId,
+        isRead: false,
+      });
+    }
+
+    return res.status(200).json({ message: responseMessage });
+  } catch (error: any) {
+    console.error("Error deleting event:", error.message);
+    return res
+      .status(500)
+      .json({ message: "Error deleting event", error: error.message });
+  }
+};
+
+export const deleteExpiredEvents = async () => {
+  try {
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    const expiredEvents = await EventInstance.findAll({
+      where: {
+        date: {
+          [Op.lt]: threeDaysAgo,
+        },
+      },
+    });
+
+    for (const event of expiredEvents) {
+      const { id, title, userId } = event;
+
+      await EventInstance.destroy({ where: { id } });
+      console.log(`Event "${title}" (ID: ${id}) deleted.`);
+
+      await NotificationInstance.create({
+        id: uuidv4(),
+        title: `Your event "${title}" has been deleted`,
+        message: `Your event titled "${title}" was deleted because it expired.`,
+        userId,
+        isRead: false,
+      });
+    }
+
+    console.log(`${expiredEvents.length} expired events processed.`);
+  } catch (error) {
+    console.error("Error deleting expired events:", error);
   }
 };

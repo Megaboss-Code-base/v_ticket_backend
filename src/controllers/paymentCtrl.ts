@@ -3,6 +3,7 @@ import axios from "axios";
 import { TicketAttribute, TicketInstance } from "../models/ticketModel";
 import { v4 as uuidv4 } from "uuid";
 import {
+  ACCOUNT_OWNER_ID,
   FLUTTERWAVE_BASE_URL,
   FLUTTERWAVE_SECRET_KEY,
   FLUUERWAVE_HASH_SECRET,
@@ -59,7 +60,6 @@ export const createPaymentLink = async (
       amount: ticket.price,
       currency: ticket.currency,
       tx_ref,
-      redirect_url: FRONTEND_URL,
     };
 
     const response = await axios.post(
@@ -82,58 +82,6 @@ export const createPaymentLink = async (
     return res.status(500).json({ message: "Error creating payment link" });
   }
 };
-
-// export const handleWebhook = async (
-//   req: Request,
-//   res: Response
-// ): Promise<any> => {
-//   try {
-//     const secretHash = FLUUERWAVE_HASH_SECRET;
-//     const signature = req.headers["verif-hash"] as string;
-
-//     if (!signature || signature !== secretHash) {
-//       return res.status(401).json({ error: "Invalid signature" });
-//     }
-
-//     const payload = req.body;
-//     if (payload.data.status === "successful") {
-//       const { email } = payload.data.customer;
-//       const { ticketId, phone, fullName } = payload.meta_data;
-//       const totalAmount = payload.data.amount / 100;
-//       const paymentReference = payload.data.flw_ref;
-//       const currency = payload.data.currency;
-
-//       await TicketInstance.update(
-//         {
-//           validationStatus: "Valid",
-//           paid: true,
-//           phone,
-//           fullName,
-//           flwRef: paymentReference,
-//         },
-//         { where: { id: ticketId } }
-//       );
-
-//       await TransactionInstance.create({
-//         id: uuidv4(),
-//         email,
-//         fullName,
-//         ticketId,
-//         totalAmount,
-//         paymentStatus: "successful",
-//         paymentReference,
-//         currency,
-//       });
-
-//       return res
-//         .status(200)
-//         .send("Webhook received and transaction processed successfully");
-//     }
-//   } catch (error: any) {
-//     console.error("Error handling webhook:", error.message);
-//     return res.status(500).json({ error: "Internal server error" });
-//   }
-// };
 
 export const createPaymentLinkForSplitAccount = async (
   req: Request,
@@ -221,11 +169,23 @@ export const createPaymentLinkForSplitAccount = async (
     if (response.data.status === "success") {
       return res.status(200).json({ link: response.data.data.link });
     } else {
-      return res.status(400).json({ message: "Error creating payment link" });
+      return res.status(400).json({
+        message: "Error creating payment link",
+        details: response.data,
+      });
     }
   } catch (error: any) {
-    console.error("Error creating payment link:", error.message);
-    return res.status(500).json({ message: "Error creating payment link" });
+    if (error.response) {
+      console.error("Flutterwave Response Error:", error.response.data);
+      return res.status(400).json({
+        message: "Error creating payment link",
+        error: error.response.data,
+      });
+    } else {
+      return res
+        .status(500)
+        .json({ message: "Error creating payment link", error: error.message });
+    }
   }
 };
 
@@ -234,9 +194,9 @@ export const handleWebhook = async (
   res: Response
 ): Promise<any> => {
   try {
+
     const secretHash = process.env.FLUUERWAVE_HASH_SECRET;
     const signature = req.headers["verif-hash"] as string;
-
     if (!signature || signature !== secretHash) {
       return res.status(401).json({ error: "Invalid signature" });
     }
@@ -270,9 +230,7 @@ export const handleWebhook = async (
         paymentReference,
         currency,
       });
-      const myId = "d9e4530b-0ee5-4803-8c22-d37934a80a7e";
-      // const myId = process.env.ACCOUNT_OWNER_ID;
-      console.log("myId", myId);
+      const myId = ACCOUNT_OWNER_ID;
       await UserInstance.increment("totalEarnings", {
         by: appOwnerSplit,
         where: { id: myId },
@@ -285,7 +243,6 @@ export const handleWebhook = async (
       return res.status(400).json({ error: "Payment was not successful" });
     }
   } catch (error: any) {
-    console.error("Error handling webhook:", error.message);
     return res.status(500).json({ error: "Internal server error" });
   }
 };

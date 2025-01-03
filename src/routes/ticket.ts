@@ -8,7 +8,7 @@ import {
   purchaseTicket,
   validateTicket,
 } from "../controllers/ticketCtrl";
-const upload = multer({ dest: 'uploads/' });  // Change the 'uploads/' directory as needed
+const upload = multer({ dest: 'uploads/' });
 
 const router = express.Router();
 

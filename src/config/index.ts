@@ -24,6 +24,7 @@ export const port = process.env.PORT || 4000;
 export const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS!);
 export const JWT_SECRET = process.env.JWT_SECRET!;
 export const EXPIRESIN = process.env.EXPIRESIN!;
+export const REFRESH_EXPIRESIN = process.env.REFRESH_EXPIRESIN!;
 export const resetPasswordExpireMinutes = parseInt(
   process.env.RESET_PASSWORD_EXPIRE_MINUTES!
 );

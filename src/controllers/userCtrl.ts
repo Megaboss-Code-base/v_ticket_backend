@@ -13,6 +13,7 @@ import {
   EXPIRESIN,
   generateRandomAlphaNumeric,
   JWT_SECRET,
+  REFRESH_EXPIRESIN,
   resetPasswordExpireMinutes,
   resetPasswordExpireUnit,
   SALT_ROUNDS,
@@ -272,10 +273,17 @@ export const login = async (req: Request, res: Response): Promise<any> => {
       { expiresIn: EXPIRESIN! }
     );
 
+    const refreshToken = jwt.sign(
+      { id: user.id, email: user.email!, role: user.role },
+      JWT_SECRET!,
+      { expiresIn: REFRESH_EXPIRESIN! }
+    );
+
     user.password = undefined!;
     return res.status(200).json({
       message: "Login successful",
       token,
+      refreshToken,
       user,
     });
   } catch (error) {
@@ -541,15 +549,26 @@ export const uploadPicture = async (
   }
 };
 
-export const getMonthlyRegistrations = async (req: Request, res: Response): Promise<any> => {
+export const getMonthlyRegistrations = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
     const registrations = await UserInstance.findAll({
       attributes: [
-        [Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")), "month"],
+        [
+          Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+          "month",
+        ],
         [Sequelize.fn("COUNT", Sequelize.col("id")), "totalRegistrations"],
       ],
       group: [Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt"))],
-      order: [[Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")), "ASC"]],
+      order: [
+        [
+          Sequelize.fn("DATE_TRUNC", "month", Sequelize.col("createdAt")),
+          "ASC",
+        ],
+      ],
     });
 
     const formattedData = registrations.map((record: any) => ({

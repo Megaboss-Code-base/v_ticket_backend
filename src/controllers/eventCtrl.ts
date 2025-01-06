@@ -168,25 +168,6 @@ export const updateEvent = async (
   }
 };
 
-// export const deleteExpiredEvents = async () => {
-//   try {
-//     const threeDaysAgo = new Date();
-//     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-
-//     const deleted = await EventInstance.destroy({
-//       where: {
-//         date: {
-//           [Op.lt]: threeDaysAgo,
-//         },
-//       },
-//     });
-
-//     console.log(`${deleted} expired events deleted.`);
-//   } catch (error) {
-//     console.error("Error deleting expired events:", error);
-//   }
-// };
-
 export const getTrendingEvents = async (
   req: Request,
   res: Response

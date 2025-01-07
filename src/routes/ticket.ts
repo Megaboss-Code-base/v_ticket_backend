@@ -5,14 +5,12 @@ import { auth } from "../middlewares/auth";
 import {
   cancelTicket,
   getEventTickets,
-  purchaseTicket,
   validateTicket,
 } from "../controllers/ticketCtrl";
 const upload = multer({ dest: 'uploads/' });
 
 const router = express.Router();
 
-router.post("/create-ticket/:eventId", purchaseTicket);
 router.post(
   "/:eventId/validate-ticket",
   auth,

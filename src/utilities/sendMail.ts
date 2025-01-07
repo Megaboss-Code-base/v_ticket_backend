@@ -4,6 +4,7 @@ interface EmailOptions {
   email: string;
   subject: string;
   message: string;
+  isHtml? : boolean
   attachments?: {
     filename: string;
     content: string;
@@ -27,6 +28,7 @@ const sendEmail = async (options: EmailOptions): Promise<void> => {
     to: options.email,
     subject: options.subject,
     text: options.message,
+    isHtml: options.isHtml,
     attachments: options.attachments,
   };
 

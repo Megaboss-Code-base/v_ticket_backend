@@ -37,11 +37,7 @@ app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/payment", paymentRoutes);
 
-// cron.schedule("0 0 * * *", async () => {
-//   console.log("Running daily cleanup for expired events...");
-//   await deleteExpiredEvents();
-// });
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 0 * * *", async () => {
   console.log("Running daily cleanup for expired events...");
   await deleteExpiredEvents();
 });

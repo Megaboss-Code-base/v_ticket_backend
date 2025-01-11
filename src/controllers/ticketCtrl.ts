@@ -1,17 +1,10 @@
 import { Request, Response } from "express";
 import { EventInstance } from "../models/eventModel";
-import { TicketAttribute, TicketInstance } from "../models/ticketModel";
-import { v4 as uuidv4 } from "uuid";
-import QRCode from "qrcode";
-import { NotificationInstance } from "../models/notificationModel";
+import { TicketInstance } from "../models/ticketModel";
 import { JwtPayload } from "jsonwebtoken";
-import sendEmail from "../utilities/sendMail";
 import { ModeratorInstance } from "../models/moderatorModel";
 import { UserAttribute, UserInstance } from "../models/userModel";
 import sharp from "sharp";
-import axios from "axios";
-
-const generateReference = () => `unique-ref-${Date.now()}`;
 
 // @ts-ignore
 const QRCodeReader = require("qrcode-reader");
@@ -41,6 +34,7 @@ export const getEventTickets = async (
       .json({ error: "Failed to fetch tickets", details: error.message });
   }
 };
+
 export const cancelTicket = async (
   req: Request,
   res: Response
@@ -105,10 +99,9 @@ export const validateTicket = async (
     // Parse the QR code data
     const { ticketId } = JSON.parse(decodedData);
 
-    // Validate the ticket
     const ticket = (await TicketInstance.findOne({
       where: { id: ticketId, eventId },
-    })) as unknown as TicketAttribute;
+    }));
 
     if (!ticket) {
       return res.status(404).json({ error: "Ticket not found." });
@@ -120,7 +113,6 @@ export const validateTicket = async (
         .json({ error: "This ticket has already been used or is invalid." });
     }
 
-    // Update the ticket status to "Used"
     const updatedTicket = await TicketInstance.update(
       { validationStatus: "Used" },
       { where: { id: ticketId } }
@@ -135,6 +127,31 @@ export const validateTicket = async (
     return res
       .status(500)
       .json({ error: "Internal server error", details: error.message });
+  }
+};
+
+
+export const deleteAllTickets = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const deletedCount = await TicketInstance.destroy({
+      where: {}, // Deletes all rows in the table
+    });
+
+    if (deletedCount === 0) {
+      return res.status(404).json({
+        message: "No tickets found to delete",
+      });
+    }
+
+    return res.status(200).json({
+      message: "All tickets have been successfully deleted",
+      deletedCount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "An error occurred while deleting tickets",
+      details: error.message,
+    });
   }
 };
 

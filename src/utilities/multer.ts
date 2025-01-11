@@ -11,7 +11,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
     return {
-      folder: "medical_reports",
+      folder: "",
       allowedFormats: ["jpg", "png", "pdf"],
     };
   },

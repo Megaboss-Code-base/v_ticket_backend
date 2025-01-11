@@ -4,11 +4,12 @@ interface EmailOptions {
   email: string;
   subject: string;
   message: string;
-  isHtml? : boolean
+  isHtml?: boolean;
   attachments?: {
-    filename: string;
-    content: string;
-    encoding: string;
+    filename?: string;
+    content?: string;
+    contentType?: string;
+    encoding?: string;
   }[];
 }
 
@@ -22,7 +23,7 @@ const sendEmail = async (options: EmailOptions): Promise<void> => {
       pass: process.env.SMTP_PASSWORD,
     },
   });
-  
+
   const message: any = {
     from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
     to: options.email,

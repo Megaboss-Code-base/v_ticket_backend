@@ -4,6 +4,7 @@ import multer from 'multer';
 import { auth } from "../middlewares/auth";
 import {
   cancelTicket,
+  deleteAllTickets,
   getEventTickets,
   validateTicket,
 } from "../controllers/ticketCtrl";
@@ -17,6 +18,7 @@ router.post(
   upload.single("file"),
   validateTicket
 );
+router.delete("/", deleteAllTickets);
 router.delete("/:ticketId", cancelTicket);
 router.get("/events/:eventId/tickets", auth, getEventTickets);
 

@@ -1,133 +1,40 @@
-// import { DataTypes, Model } from "sequelize";
-// import { db } from "../config";
-// import { EventInstance } from "./eventModel";
-
-// export interface TicketAttribute {
-//   id: string;
-//   eventId: string;
-//   email: string;
-//   phone: string;
-//   fullName: string;
-//   ticketType: string;
-//   price: number;
-//   purchaseDate: Date;
-//   qrCode: string;
-//   validationStatus: "Valid" | "Used" | "Expired" | "Invalid";
-//   seatNumber?: string;
-//   paid: boolean;
-//   currency: string;
-//   flwRef?: string;
-// }
-
-// export class TicketInstance extends Model<TicketAttribute> {}
-
-// TicketInstance.init(
-//   {
-//     id: {
-//       type: DataTypes.UUID,
-//       primaryKey: true,
-//       allowNull: false,
-//       defaultValue: DataTypes.UUIDV4,
-//     },
-//     eventId: {
-//       type: DataTypes.UUID,
-//       allowNull: false,
-//     },
-//     email: {
-//       type: DataTypes.STRING,
-//       allowNull: false,
-//     },
-//     phone: {
-//       type: DataTypes.STRING,
-//       allowNull: false,
-//     },
-//     fullName: {
-//       type: DataTypes.STRING,
-//       allowNull: false,
-//     },
-//     ticketType: {
-//       type: DataTypes.STRING,
-//       allowNull: false,
-//     },
-//     price: {
-//       type: DataTypes.FLOAT,
-//       allowNull: false,
-//     },
-//     purchaseDate: {
-//       type: DataTypes.DATE,
-//       allowNull: false,
-//       defaultValue: DataTypes.NOW,
-//     },
-//     paid: {
-//       type: DataTypes.BOOLEAN,
-//       allowNull: false,
-//       defaultValue: false,
-//     },
-//     qrCode: {
-//       type: DataTypes.TEXT,
-//       allowNull: false,
-//     },
-//     validationStatus: {
-//       type: DataTypes.ENUM("Valid", "Used", "Expired", "Invalid"),
-//       allowNull: false,
-//       defaultValue: "Invalid",
-//     },
-//     seatNumber: {
-//       type: DataTypes.STRING,
-//       allowNull: true,
-//     },
-//     currency: {
-//       type: DataTypes.STRING,
-//       allowNull: false,
-//     },
-//     flwRef: {
-//       type: DataTypes.STRING,
-//       allowNull: true,
-//     },
-//   },
-//   {
-//     sequelize: db,
-//     tableName: "tickets",
-//   }
-// );
-
-// EventInstance.hasMany(TicketInstance, { foreignKey: "eventId", as: "tickets" });
-// TicketInstance.belongsTo(EventInstance, { foreignKey: "eventId", as: "event" });
-
-import { DataTypes, Model } from "sequelize";
+import {
+  DataTypes,
+  Model,
+  InferAttributes,
+  InferCreationAttributes,
+  CreationOptional,
+} from "sequelize";
 import { db } from "../config";
-import { EventInstance } from "./eventModel";
+import EventInstance from "./eventModel";
 
-export interface TicketAttribute {
-  id: string;
-  eventId: string;
-  email: string;
-  phone: string;
-  fullName: string;
-  ticketType: string;
-  price: number;
-  purchaseDate: Date;
-  qrCode: string;
-  validationStatus: "Valid" | "Used" | "Expired" | "Invalid";
-  seatNumber?: string;
-  paid: boolean;
-  currency: string;
-  flwRef?: string;
-  attendees?: { name: string; email: string }[];
+export class TicketInstance extends Model<
+  InferAttributes<TicketInstance>,
+  InferCreationAttributes<TicketInstance>
+> {
+  declare id: string;
+  declare email: string;
+  declare phone: string;
+  declare fullName: string;
+  declare eventId: string;
+  declare ticketType: string;
+  declare price: number;
+  declare purchaseDate: Date;
+  declare qrCode: string;
+  declare paid: boolean;
+  declare currency: string;
+  declare flwRef: string | null;
+  declare attendees: { name: string; email: string } | { name: string; email: string }[] | null;
+  declare validationStatus: string;
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
 }
-
-export class TicketInstance extends Model<TicketAttribute> {}
 
 TicketInstance.init(
   {
     id: {
       type: DataTypes.UUID,
       primaryKey: true,
-      allowNull: false,
-      defaultValue: DataTypes.UUIDV4,
-    },
-    eventId: {
-      type: DataTypes.UUID,
       allowNull: false,
     },
     email: {
@@ -142,6 +49,10 @@ TicketInstance.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    eventId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+    },
     ticketType: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -153,25 +64,16 @@ TicketInstance.init(
     purchaseDate: {
       type: DataTypes.DATE,
       allowNull: false,
-      defaultValue: DataTypes.NOW,
+    },
+    qrCode: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "",
     },
     paid: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
-    },
-    qrCode: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    validationStatus: {
-      type: DataTypes.ENUM("Valid", "Used", "Expired", "Invalid"),
-      allowNull: false,
-      defaultValue: "Invalid",
-    },
-    seatNumber: {
-      type: DataTypes.STRING,
-      allowNull: true,
     },
     currency: {
       type: DataTypes.STRING,
@@ -185,12 +87,43 @@ TicketInstance.init(
       type: DataTypes.JSONB,
       allowNull: true,
       validate: {
-        isValidArray(value: any) {
-          if (value && !Array.isArray(value)) {
-            throw new Error("Attendees must be an array of objects");
+        isValidAttendees(value: any) {
+          if (value !== null) {
+            if (Array.isArray(value)) {
+              value.forEach((attendee: any) => {
+                if (
+                  typeof attendee.name !== "string" ||
+                  typeof attendee.email !== "string"
+                ) {
+                  throw new Error(
+                    "Each attendee in the array must have a name and email as strings"
+                  );
+                }
+              });
+            } else if (
+              typeof value.name !== "string" ||
+              typeof value.email !== "string"
+            ) {
+              throw new Error("Single attendee must have a name and email as strings");
+            }
           }
         },
       },
+    },
+    validationStatus: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "Invalid",
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
     },
   },
   {
@@ -201,3 +134,5 @@ TicketInstance.init(
 
 EventInstance.hasMany(TicketInstance, { foreignKey: "eventId", as: "tickets" });
 TicketInstance.belongsTo(EventInstance, { foreignKey: "eventId", as: "event" });
+
+export default TicketInstance;

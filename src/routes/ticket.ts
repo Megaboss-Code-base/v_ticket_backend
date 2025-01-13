@@ -20,6 +20,7 @@ router.post(
 );
 router.delete("/", deleteAllTickets);
 router.delete("/:ticketId", cancelTicket);
+router.get("/validate-ticket", validateTicket);
 router.get("/events/:eventId/tickets", auth, getEventTickets);
 
 export default router;

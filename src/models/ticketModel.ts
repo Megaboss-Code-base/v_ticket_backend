@@ -24,8 +24,12 @@ export class TicketInstance extends Model<
   declare paid: boolean;
   declare currency: string;
   declare flwRef: string | null;
-  declare attendees: { name: string; email: string } | { name: string; email: string }[] | null;
-  declare validationStatus: string;
+  declare attendees:
+    | { name: string; email: string }
+    | { name: string; email: string }[]
+    | null;
+  declare validationStatus: "valid" | "invalid" | "expired" | "used";
+  declare isScanned: boolean;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -104,16 +108,23 @@ TicketInstance.init(
               typeof value.name !== "string" ||
               typeof value.email !== "string"
             ) {
-              throw new Error("Single attendee must have a name and email as strings");
+              throw new Error(
+                "Single attendee must have a name and email as strings"
+              );
             }
           }
         },
       },
     },
     validationStatus: {
-      type: DataTypes.STRING,
+      type: DataTypes.ENUM("valid", "invalid", "used", "expired"), // Changed to ENUM
       allowNull: false,
-      defaultValue: "Invalid",
+      defaultValue: "invalid",
+    },
+    isScanned: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     createdAt: {
       type: DataTypes.DATE,

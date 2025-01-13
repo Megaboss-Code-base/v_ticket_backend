@@ -5,6 +5,7 @@ import { JwtPayload } from "jsonwebtoken";
 import { ModeratorInstance } from "../models/moderatorModel";
 import { UserAttribute, UserInstance } from "../models/userModel";
 import sharp from "sharp";
+import { verifyTicketSignature } from "../config";
 
 // @ts-ignore
 const QRCodeReader = require("qrcode-reader");
@@ -53,88 +54,60 @@ export const cancelTicket = async (
       .json({ error: "Failed to cancel ticket", details: error.message });
   }
 };
+
 export const validateTicket = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
-  const { eventId } = req.params;
-  const moderatorId = req.user;
-  const file = req.file;
+  const { ticketId, signature } = req.query;
+
+  if (!ticketId || !signature) {
+    return res
+      .status(400)
+      .json({ message: "Ticket ID and signature are required" });
+  }
+
+  if (!verifyTicketSignature(ticketId as string, signature as string)) {
+    return res.status(403).json({ message: "Invalid QR code signature" });
+  }
 
   try {
-    const isUser = (await UserInstance.findOne({
-      where: { id: moderatorId },
-    })) as unknown as UserAttribute;
+    const ticket = await TicketInstance.findOne({ where: { id: ticketId } });
 
-    const isModerator = await ModeratorInstance.findOne({
-      where: { eventId, userEmail: isUser.email },
-    });
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
 
-    if (!isModerator) {
-      return res.status(403).json({
-        error: "You are not authorized to validate tickets for this event.",
+    if (ticket.isScanned === true) {
+      return res.status(200).json({
+        message: "Ticket already scanned",
+        ticket,
       });
     }
 
-    if (!file) {
-      return res.status(400).json({ error: "QR code image is required." });
-    }
-
-    const imageBuffer = await sharp(file.path).resize(300, 300).toBuffer();
-
-    const { width, height } = await sharp(imageBuffer).metadata();
-    if (!width || !height) {
-      return res.status(400).json({ error: "Invalid image format." });
-    }
-
-    const qr = new QRCodeReader();
-    const decodedData = await new Promise<string>((resolve, reject) => {
-      qr.callback = (err: any, value: any) => {
-        if (err) return reject(err);
-        resolve(value.result);
-      };
-      qr.decode(imageBuffer); // Pass the image buffer to the QR code reader
-    });
-
-    // Parse the QR code data
-    const { ticketId } = JSON.parse(decodedData);
-
-    const ticket = (await TicketInstance.findOne({
-      where: { id: ticketId, eventId },
-    }));
-
-    if (!ticket) {
-      return res.status(404).json({ error: "Ticket not found." });
-    }
-
-    if (ticket.validationStatus !== "Valid") {
-      return res
-        .status(400)
-        .json({ error: "This ticket has already been used or is invalid." });
-    }
-
-    const updatedTicket = await TicketInstance.update(
-      { validationStatus: "Used" },
-      { where: { id: ticketId } }
-    );
+    ticket.isScanned = true;
+    await ticket.save();
 
     return res.status(200).json({
-      message: "Ticket validated successfully.",
-      ticket: updatedTicket,
+      message: "Ticket successfully validated",
+      ticket,
     });
   } catch (error: any) {
-    console.error("Error validating ticket:", error); // Log the error
-    return res
-      .status(500)
-      .json({ error: "Internal server error", details: error.message });
+    console.error("Error validating ticket:", error);
+    return res.status(500).json({
+      message: "An error occurred while validating the ticket",
+      error: error.message,
+    });
   }
 };
 
-
-export const deleteAllTickets = async (req: Request, res: Response): Promise<any> => {
+export const deleteAllTickets = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
     const deletedCount = await TicketInstance.destroy({
-      where: {}, // Deletes all rows in the table
+      where: {},
     });
 
     if (deletedCount === 0) {
@@ -154,4 +127,3 @@ export const deleteAllTickets = async (req: Request, res: Response): Promise<any
     });
   }
 };
-

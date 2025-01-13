@@ -1,5 +1,7 @@
 import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
+import crypto from "crypto";
+
 dotenv.config();
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -50,3 +52,33 @@ export function generateRandomAlphaNumeric(length: any) {
   }
   return result;
 }
+
+export function generateTicketSignature(ticketId: string): string {
+  const secret = process.env.TICKET_SECRET_KEY || "your_secret_key";
+  return crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
+}
+
+export function verifyTicketSignature(ticketId: string, signature: string): boolean {
+  const secret = process.env.SECRET_KEY || "your_secret_key";
+  const expectedSignature = crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
+  return signature === expectedSignature;
+}
+
+export const validateFlutterwaveWebhook = (payload: string, signature: string) => {
+  const hash = crypto
+    .createHmac("sha256", FLUTTERWAVE_HASH_SECRET)
+    .update(payload)
+    .digest("hex");
+  return hash === signature;
+};
+
+// In handleWebhook
+// const isValidWebhook = validateFlutterwaveWebhook(
+//   JSON.stringify(req.body),
+//   req.headers["verif-hash"] as string
+// );
+
+// if (!isValidWebhook) {
+//   return res.status(401).json({ error: "Invalid webhook signature" });
+// }
+

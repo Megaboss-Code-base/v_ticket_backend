@@ -4,7 +4,7 @@ import { EventInstance } from "../models/eventModel";
 import { UserAttribute, UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
 import slugify from "slugify";
-import { v2 as cloudinary } from "cloudinary"; // Correct import
+import { v2 as cloudinary } from "cloudinary";
 
 import {
   eventValidationSchema,

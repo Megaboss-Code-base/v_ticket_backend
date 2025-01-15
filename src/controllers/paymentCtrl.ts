@@ -31,27 +31,19 @@ export const purchaseTicket = async (
     req.body;
 
   if (!email || !phone || !fullName || !quantity || quantity < 1) {
-    return res.status(400).json({
-      error: "Provide all required fields and a valid quantity",
-    });
+    return res
+      .status(400)
+      .json({ error: "Provide all required fields and a valid quantity" });
   }
 
-  if (!Array.isArray(attendees) || attendees.length !== quantity) {
+  if (
+    attendees &&
+    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
+  ) {
     return res.status(400).json({
-      error: "Attendees must be an array matching the ticket quantity",
+      error: "Attendees must match the ticket quantity",
     });
   }
-
-  attendees.forEach((attendee, index) => {
-    if (
-      typeof attendee.name !== "string" ||
-      typeof attendee.email !== "string"
-    ) {
-      return res.status(400).json({
-        error: `Invalid attendee at index ${index}: Each attendee must have a name and email`,
-      });
-    }
-  });
 
   try {
     const event = await EventInstance.findOne({ where: { id: eventId } });
@@ -72,50 +64,51 @@ export const purchaseTicket = async (
     const ticketInfo = event.ticketType.find(
       (ticket) => ticket.name === ticketType
     );
-
     if (!ticketInfo) {
       return res.status(400).json({ error: "Invalid ticket type" });
+    }
+
+    if (Number(ticketInfo.quantity) < quantity) {
+      return res.status(400).json({
+        error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
+      });
     }
 
     const ticketPrice = parseFloat(ticketInfo.price);
     const totalPrice = ticketPrice * quantity;
 
-    const tickets = await Promise.all(
-      Array.from({ length: quantity }).map(async (_, i) => {
-        const ticketId = uuidv4();
+    const ticketId = uuidv4();
 
-        const signature = generateTicketSignature(ticketId);
-        const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
-        const qrCode = await QRCode.toDataURL(qrCodeData);
+    const signature = generateTicketSignature(ticketId);
+    const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCode = await QRCode.toDataURL(qrCodeData);
 
-        return TicketInstance.create({
-          id: ticketId,
-          email,
-          phone,
-          fullName,
-          eventId: event.id,
-          ticketType,
-          price: ticketPrice,
-          purchaseDate: new Date(),
-          qrCode,
-          paid: false,
-          currency,
-          attendees: attendees[i],
-          validationStatus: "invalid",
-          isScanned: false,
-        });
-      })
-    );
+    const ticket = await TicketInstance.create({
+      id: ticketId,
+      email,
+      phone,
+      fullName,
+      eventId: event.id,
+      ticketType,
+      price: totalPrice,
+      purchaseDate: new Date(),
+      qrCode,
+      paid: false,
+      currency,
+      attendees: attendees || [{ name: fullName, email }],
+      validationStatus: "invalid",
+      isScanned: false,
+    });
 
     const eventOwner = (await UserInstance.findOne({
       where: { id: event.userId },
     })) as unknown as UserAttribute;
+
     if (!eventOwner) {
       return res.status(404).json({ error: "Event owner not found" });
     }
 
     const tx_ref = generateReference();
-    const ticketIds = tickets.map((t) => t.id);
 
     const paymentData = {
       customer: {
@@ -123,9 +116,8 @@ export const purchaseTicket = async (
         email,
       },
       meta: {
-        ticketIds: ticketIds.join(","),
-        phone,
-        fullName,
+        ticketId,
+        quantity,
       },
       amount: totalPrice,
       currency,
@@ -159,18 +151,14 @@ export const purchaseTicket = async (
     );
 
     if (response.data && response.data.data && response.data.data.link) {
-      return res.status(200).json({ link: response.data.data.link });
+      return res.status(200).json({ link: response.data.data.link, ticketId });
     } else {
-      return res.status(400).json({
-        message: "Error creating payment link",
-        details: response.data,
-      });
+      return res.status(400).json({ error: "Error creating payment link" });
     }
   } catch (error: any) {
-    return res.status(500).json({
-      error: "Failed to create ticket",
-      details: error.message,
-    });
+    return res
+      .status(500)
+      .json({ error: "Failed to create ticket", details: error.message });
   }
 };
 
@@ -180,7 +168,6 @@ export const handleWebhook = async (
 ): Promise<any> => {
   try {
     const secretHash = FLUTTERWAVE_HASH_SECRET;
-
     const signature = req.headers["verif-hash"] || req.headers["Verif-Hash"];
 
     if (!signature || signature !== secretHash) {
@@ -192,291 +179,124 @@ export const handleWebhook = async (
     if (payload.data.status === "successful") {
       const transaction = await db.transaction();
 
-      const { email } = payload.data.customer;
-      const { ticketIds, phone, fullName } = payload.meta_data;
-      const totalAmount = payload.data.amount;
-      const paymentReference = payload.data.flw_ref;
-      const currency = payload.data.currency;
+      try {
+        const { ticketId, quantity } = payload.meta_data;
+        const totalAmount = payload.data.amount;
+        const paymentReference = payload.data.flw_ref;
+        const currency = payload.data.currency;
 
-      const ticketIdsArray = ticketIds
-        .split(",")
-        .filter((id: any) => id.trim() !== "");
-      const amountPerTicket = totalAmount / ticketIdsArray.length;
+        const ticket = await TicketInstance.findOne({
+          where: { id: ticketId },
+          transaction,
+        });
 
-      const updatedTickets = [];
-      const qrCodes = [];
-
-      for (const ticketId of ticketIdsArray) {
-        const qrCodeData = {
-          ticketId,
-          email,
-          fullName,
-        };
-
-        const qrCode = await QRCode.toDataURL(JSON.stringify(qrCodeData));
-        qrCodes.push(qrCode);
-
-        const [_, updatedTicketRecords] = await TicketInstance.update(
-          {
-            validationStatus: "valid",
-            qrCode,
-            paid: true,
-            flwRef: paymentReference,
-          },
-          {
-            where: { id: ticketId },
-            returning: true,
-            transaction,
-          }
-        );
-
-        if (updatedTicketRecords.length > 0) {
-          updatedTickets.push(updatedTicketRecords[0]);
+        if (!ticket) {
+          throw new Error("Ticket not found");
         }
 
-        await TransactionInstance.create(
-          {
-            id: uuidv4(),
-            email,
-            fullName,
-            ticketId,
-            totalAmount: amountPerTicket,
-            paymentStatus: "successful",
-            paymentReference,
-            currency,
-          },
-          { transaction }
-        );
-      }
+        const event = await EventInstance.findOne({
+          where: { id: ticket.eventId },
+          transaction,
+        });
 
-      if (updatedTickets.length === 0) {
-        return res.status(404).json({ error: "No tickets updated" });
-      }
+        if (!event) {
+          throw new Error("Event not found");
+        }
 
-      const event = await EventInstance.findOne({
-        where: { id: updatedTickets[0].eventId },
-      });
+        ticket.validationStatus = "valid";
+        ticket.paid = true;
+        ticket.flwRef = paymentReference;
+        await ticket.save({ transaction });
 
-      const appOwnerSplit = (totalAmount * 9.85) / 100;
-      const myId = ACCOUNT_OWNER_ID;
-      await UserInstance.increment("totalEarnings", {
-        by: appOwnerSplit,
-        where: { id: myId },
-      });
-
-      const eventOwner = await UserInstance.findOne({
-        where: { id: event?.userId },
-      });
-
-      if (eventOwner) {
-        const myPrice = parseFloat(
-          (amountPerTicket * ticketIdsArray.length * (88.65 / 100)).toFixed(2)
+        const ticketTypeIndex = event.ticketType.findIndex(
+          (type) => type.name === ticket.ticketType
         );
 
-        await NotificationInstance.create(
-          {
-            id: uuidv4(),
-            title: `Tickets purchased for your event "${event?.title}"`,
-            message: `Tickets for your event titled "${event?.title}" have been purchased. Amount paid: ${myPrice}. Purchaser: ${fullName}.`,
-            userId: event!.userId,
-            isRead: false,
-          },
-          { transaction }
-        );
+        if (ticketTypeIndex >= 0) {
+          const ticketType = event.ticketType[ticketTypeIndex];
+
+          const currentSold = parseInt(ticketType.sold || "0", 10);
+          const currentQuantity = parseInt(ticketType.quantity || "0", 10);
+
+          if (currentQuantity < quantity) {
+            throw new Error("Not enough tickets available");
+          }
+
+          event.ticketType[ticketTypeIndex] = {
+            ...ticketType,
+            sold: (currentSold + quantity).toString(),
+            quantity: (currentQuantity - quantity).toString(),
+          };
+
+          await EventInstance.update(
+            { ticketType: event.ticketType },
+            { where: { id: event.id }, transaction }
+          );
+        } else {
+          throw new Error("Ticket type not found in the event");
+        }
+
+        const eventOwner = await UserInstance.findOne({
+          where: { id: event.userId },
+          transaction,
+        });
+
+        if (eventOwner) {
+          const earnings = (totalAmount * 0.9).toFixed(2);
+          await NotificationInstance.create(
+            {
+              id: uuidv4(),
+              title: `Ticket purchased for your event "${event.title}"`,
+              message: `A ticket for your event titled "${event.title}" has been purchased. Amount paid: ${currency} ${earnings}. Purchaser: ${ticket.fullName}.`,
+              userId: event.userId,
+              isRead: false,
+            },
+            { transaction }
+          );
+        }
+
+        const mailSubject = `Your Ticket for "${event.title}"`;
+        const mailMessage = `
+          Dear ${ticket.fullName},
+
+          Thank you for purchasing a ticket for the event "${event.title}".
+          Here are your ticket details:
+
+          - Event: ${event.title}
+          - Ticket Type: ${ticket.ticketType}
+          - Price: ${currency} ${totalAmount.toFixed(2)}
+          - Date: ${new Date(event.date).toLocaleDateString()}
+
+          Please find your ticket QR code attached below.
+
+          Best regards,
+          The Event Team
+        `;
+
+        await sendEmail({
+          email: ticket.email,
+          subject: mailSubject,
+          message: mailMessage,
+          attachments: [
+            {
+              filename: `ticket-qr-code.png`,
+              content: ticket.qrCode.split(",")[1],
+              encoding: "base64",
+            },
+          ],
+        });
+
+        await transaction.commit();
+        return res.status(200).send("Webhook received and transaction processed successfully");
+      } catch (error: any) {
+        await transaction.rollback();
+        return res.status(500).json({ error: "Transaction failed", details: error.message });
       }
-
-      const mailSubject = `Your Tickets for "${event?.title}"`;
-      const mailMessage = `
-        Dear ${fullName},
-
-        Thank you for purchasing tickets for the event "${event?.title}".
-        Here are your ticket details:
-
-        - Event: ${event?.title}
-        - Tickets: ${ticketIdsArray.length}
-        - Total Price: ${currency} ${totalAmount.toFixed(2)}
-        - Date: ${new Date(event!.date).toLocaleDateString()}
-
-        Please find your ticket QR codes attached below.
-
-        Best regards,
-        The Event Team
-      `;
-
-      const attachments = qrCodes.map((qrCode, index) => ({
-        filename: `ticket-${index + 1}-qr-code.png`,
-        content: qrCode.split(",")[1],
-        encoding: "base64",
-      }));
-      await sendEmail({
-        email,
-        subject: mailSubject,
-        message: mailMessage,
-        attachments,
-      });
-      await transaction.commit();
-
-      return res
-        .status(200)
-        .send("Webhook received and transaction processed successfully");
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
     }
   } catch (error: any) {
-    console.error(error.message);
-    return res
-      .status(500)
-      .json({ error: "Internal server error", details: error.message });
+    return res.status(500).json({ error: "Internal server error", details: error.message });
   }
 };
 
-// export const handleWebhook = async (
-//   req: Request,
-//   res: Response
-// ): Promise<any> => {
-//   const payload = req.body;
-//   const signature = req.headers["verif-hash"] as string;
-
-//   if (!signature || !validateFlutterwaveWebhook(JSON.stringify(payload), signature)) {
-//     return res.status(401).json({ error: "Invalid webhook signature" });
-//   }
-
-//   if (payload.data.status !== "successful") {
-//     return res.status(400).json({ error: "Payment was not successful" });
-//   }
-
-//   const transaction = await db.transaction();
-//   try {
-//     const { email } = payload.data.customer;
-//     const { ticketIds, phone, fullName } = payload.meta_data;
-//     const totalAmount = payload.data.amount;
-//     const paymentReference = payload.data.flw_ref;
-//     const currency = payload.data.currency;
-
-//     const ticketIdsArray = ticketIds
-//       .split(",")
-//       .filter((id: any) => id.trim() !== "");
-
-//     const amountPerTicket = totalAmount / ticketIdsArray.length;
-
-//     const updatedTickets = [];
-//     const qrCodes = [];
-
-//     for (const ticketId of ticketIdsArray) {
-//       const qrCodeData = {
-//         ticketId,
-//         email,
-//         fullName,
-//       };
-
-//       const qrCode = await QRCode.toDataURL(JSON.stringify(qrCodeData));
-//       qrCodes.push(qrCode);
-
-//       const [_, updatedTicketRecords] = await TicketInstance.update(
-//         {
-//           validationStatus: "valid",
-//           qrCode,
-//           paid: true,
-//           flwRef: paymentReference,
-//         },
-//         { where: { id: ticketId }, returning: true, transaction }
-//       );
-
-//       if (updatedTicketRecords.length > 0) {
-//         updatedTickets.push(updatedTicketRecords[0]);
-//       }
-
-//       await TransactionInstance.create(
-//         {
-//           id: uuidv4(),
-//           email,
-//           fullName,
-//           ticketId,
-//           totalAmount: amountPerTicket,
-//           paymentStatus: "successful",
-//           paymentReference,
-//           currency,
-//         },
-//         { transaction }
-//       );
-//     }
-
-//     if (updatedTickets.length === 0) {
-//       await transaction.rollback();
-//       return res.status(404).json({ error: "No tickets updated" });
-//     }
-
-//     const event = await EventInstance.findOne({
-//       where: { id: updatedTickets[0].eventId },
-//     });
-
-//     const appOwnerSplit = (totalAmount * 9.85) / 100;
-//     await UserInstance.increment("totalEarnings", {
-//       by: appOwnerSplit,
-//       where: { id: ACCOUNT_OWNER_ID },
-//       transaction,
-//     });
-
-//     const eventOwner = await UserInstance.findOne({
-//       where: { id: event?.userId },
-//     });
-
-//     if (eventOwner) {
-//       const myPrice = parseFloat(
-//         (amountPerTicket * ticketIdsArray.length * (88.65 / 100)).toFixed(2)
-//       );
-
-//       await NotificationInstance.create(
-//         {
-//           id: uuidv4(),
-//           title: `Tickets purchased for your event "${event?.title}"`,
-//           message: `Tickets for your event titled "${event?.title}" have been purchased. Amount paid: ${myPrice}. Purchaser: ${fullName}.`,
-//           userId: event!.userId,
-//           isRead: false,
-//         },
-//         { transaction }
-//       );
-//     }
-
-//     const mailSubject = `Your Tickets for "${event?.title}"`;
-//     const mailMessage = `
-//       Dear ${fullName},
-
-//       Thank you for purchasing tickets for the event "${event?.title}".
-//       Here are your ticket details:
-
-//       - Event: ${event?.title}
-//       - Tickets: ${ticketIdsArray.length}
-//       - Total Price: ${currency} ${totalAmount.toFixed(2)}
-//       - Date: ${new Date(event!.date).toLocaleDateString()}
-
-//       Please find your ticket QR codes attached below.
-
-//       Best regards,
-//       The Event Team
-//     `;
-
-//     const attachments = qrCodes.map((qrCode, index) => ({
-//       filename: `ticket-${index + 1}-qr-code.png`,
-//       content: qrCode.split(",")[1],
-//       encoding: "base64",
-//     }));
-
-//     await sendEmail({
-//       email,
-//       subject: mailSubject,
-//       message: mailMessage,
-//       attachments,
-//     });
-
-//     await transaction.commit();
-//     return res
-//       .status(200)
-//       .send("Webhook received and transaction processed successfully");
-//   } catch (error: any) {
-//     await transaction.rollback();
-//     return res
-//       .status(500)
-//       .json({ error: "Internal server error", details: error.message });
-//   }
-// };

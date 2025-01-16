@@ -22,146 +22,6 @@ import { v2 as cloudinary } from "cloudinary";
 
 const generateReference = () => `unique-ref-${Date.now()}`;
 
-export const purchaseTicket = async (
-  req: Request,
-  res: Response
-): Promise<any> => {
-  const { eventId } = req.params;
-  const { ticketType, currency, email, phone, fullName, attendees, quantity } =
-    req.body;
-
-  if (!email || !phone || !fullName || !quantity || quantity < 1) {
-    return res
-      .status(400)
-      .json({ error: "Provide all required fields and a valid quantity" });
-  }
-
-  if (
-    attendees &&
-    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
-  ) {
-    return res.status(400).json({
-      error: "Attendees must match the ticket quantity",
-    });
-  }
-
-  try {
-    const event = await EventInstance.findOne({ where: { id: eventId } });
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
-    if (new Date() > new Date(event.date)) {
-      return res
-        .status(400)
-        .json({ error: "Cannot purchase tickets for expired events" });
-    }
-
-    if (!Array.isArray(event.ticketType)) {
-      return res.status(400).json({ error: "Invalid ticket type structure" });
-    }
-
-    const ticketInfo = event.ticketType.find(
-      (ticket) => ticket.name === ticketType
-    );
-    if (!ticketInfo) {
-      return res.status(400).json({ error: "Invalid ticket type" });
-    }
-
-    if (Number(ticketInfo.quantity) < quantity) {
-      return res.status(400).json({
-        error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
-      });
-    }
-
-    const ticketPrice = parseFloat(ticketInfo.price);
-    const totalPrice = ticketPrice * quantity;
-
-    const ticketId = uuidv4();
-
-    const signature = generateTicketSignature(ticketId);
-    const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
-    const qrCode = await QRCode.toDataURL(qrCodeData);
-
-    const ticket = await TicketInstance.create({
-      id: ticketId,
-      email,
-      phone,
-      fullName,
-      eventId: event.id,
-      ticketType,
-      price: totalPrice,
-      purchaseDate: new Date(),
-      qrCode,
-      paid: false,
-      currency,
-      attendees: attendees || [{ name: fullName, email }],
-      validationStatus: "invalid",
-      isScanned: false,
-    });
-
-    const eventOwner = (await UserInstance.findOne({
-      where: { id: event.userId },
-    })) as unknown as UserAttribute;
-
-    if (!eventOwner) {
-      return res.status(404).json({ error: "Event owner not found" });
-    }
-
-    const tx_ref = generateReference();
-
-    const paymentData = {
-      customer: {
-        name: fullName,
-        email,
-      },
-      meta: {
-        ticketId,
-        quantity,
-      },
-      amount: totalPrice,
-      currency,
-      tx_ref,
-      redirect_url: FRONTEND_URL,
-      subaccounts: [
-        {
-          id: process.env.APP_OWNER_SUBACCOUNT_ID,
-          transaction_split_ratio: 10,
-        },
-        {
-          bank_account: {
-            account_bank: eventOwner.account_bank,
-            account_number: eventOwner.account_number,
-          },
-          country: eventOwner.country,
-          transaction_split_ratio: 90,
-        },
-      ],
-    };
-
-    const response = await axios.post(
-      `${FLUTTERWAVE_BASE_URL}/payments`,
-      paymentData,
-      {
-        headers: {
-          Authorization: `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (response.data && response.data.data && response.data.data.link) {
-      return res.status(200).json({ link: response.data.data.link, ticketId });
-    } else {
-      return res.status(400).json({ error: "Error creating payment link" });
-    }
-  } catch (error: any) {
-    return res
-      .status(500)
-      .json({ error: "Failed to create ticket", details: error.message });
-  }
-};
-
 export const handleWebhook = async (
   req: Request,
   res: Response
@@ -287,16 +147,201 @@ export const handleWebhook = async (
         });
 
         await transaction.commit();
-        return res.status(200).send("Webhook received and transaction processed successfully");
+        return res
+          .status(200)
+          .send("Webhook received and transaction processed successfully");
       } catch (error: any) {
         await transaction.rollback();
-        return res.status(500).json({ error: "Transaction failed", details: error.message });
+        return res
+          .status(500)
+          .json({ error: "Transaction failed", details: error.message });
       }
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
     }
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal server error", details: error.message });
+    return res
+      .status(500)
+      .json({ error: "Internal server error", details: error.message });
   }
 };
 
+export const purchaseTicket = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { eventId } = req.params;
+  const { ticketType, currency, email, phone, fullName, attendees, quantity } =
+    req.body;
+
+  if (!email || !phone || !fullName || !quantity || quantity < 1) {
+    return res
+      .status(400)
+      .json({ error: "Provide all required fields and a valid quantity" });
+  }
+
+  if (
+    attendees &&
+    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
+  ) {
+    return res.status(400).json({
+      error: "Attendees must match the ticket quantity",
+    });
+  }
+
+  try {
+    const event = await EventInstance.findOne({ where: { id: eventId } });
+    if (!event) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    if (new Date() > new Date(event.date)) {
+      return res
+        .status(400)
+        .json({ error: "Cannot purchase tickets for expired events" });
+    }
+
+    if (!Array.isArray(event.ticketType)) {
+      return res.status(400).json({ error: "Invalid ticket type structure" });
+    }
+
+    const ticketInfo = event.ticketType.find(
+      (ticket) => ticket.name === ticketType
+    );
+    if (!ticketInfo) {
+      return res.status(400).json({ error: "Invalid ticket type" });
+    }
+
+    if (Number(ticketInfo.quantity) < quantity) {
+      return res.status(400).json({
+        error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
+      });
+    }
+
+    const ticketPrice = parseFloat(ticketInfo.price);
+
+    if (ticketPrice === 0) {
+      const ticketId = uuidv4();
+
+      const signature = generateTicketSignature(ticketId);
+      const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+      const qrCode = await QRCode.toDataURL(qrCodeData);
+
+      const ticket = await TicketInstance.create({
+        id: ticketId,
+        email,
+        phone,
+        fullName,
+        eventId: event.id,
+        ticketType,
+        price: 0,
+        purchaseDate: new Date(),
+        qrCode,
+        paid: true,
+        currency,
+        attendees: attendees || [{ name: fullName, email }],
+        validationStatus: "valid",
+        isScanned: false,
+      });
+
+      ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
+      ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id } }
+      );
+
+      return res.status(200).json({
+        message: "Ticket successfully created for free event",
+        ticket,
+        redirect: FRONTEND_URL,
+      });
+    }
+
+    const totalPrice = ticketPrice * quantity;
+
+    const ticketId = uuidv4();
+
+    const signature = generateTicketSignature(ticketId);
+    const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCode = await QRCode.toDataURL(qrCodeData);
+
+    const ticket = await TicketInstance.create({
+      id: ticketId,
+      email,
+      phone,
+      fullName,
+      eventId: event.id,
+      ticketType,
+      price: totalPrice,
+      purchaseDate: new Date(),
+      qrCode,
+      paid: false,
+      currency,
+      attendees: attendees || [{ name: fullName, email }],
+      validationStatus: "invalid",
+      isScanned: false,
+    });
+
+    const eventOwner = (await UserInstance.findOne({
+      where: { id: event.userId },
+    })) as unknown as UserAttribute;
+
+    if (!eventOwner) {
+      return res.status(404).json({ error: "Event owner not found" });
+    }
+
+    const tx_ref = generateReference();
+
+    const paymentData = {
+      customer: {
+        name: fullName,
+        email,
+      },
+      meta: {
+        ticketId,
+        quantity,
+      },
+      amount: totalPrice,
+      currency,
+      tx_ref,
+      redirect_url: FRONTEND_URL,
+      subaccounts: [
+        {
+          id: process.env.APP_OWNER_SUBACCOUNT_ID,
+          transaction_split_ratio: 10,
+        },
+        {
+          bank_account: {
+            account_bank: eventOwner.account_bank,
+            account_number: eventOwner.account_number,
+          },
+          country: eventOwner.country,
+          transaction_split_ratio: 90,
+        },
+      ],
+    };
+
+    const response = await axios.post(
+      `${FLUTTERWAVE_BASE_URL}/payments`,
+      paymentData,
+      {
+        headers: {
+          Authorization: `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data && response.data.data && response.data.data.link) {
+      return res.status(200).json({ link: response.data.data.link, ticketId });
+    } else {
+      return res.status(400).json({ error: "Error creating payment link" });
+    }
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ error: "Failed to create ticket", details: error.message });
+  }
+};

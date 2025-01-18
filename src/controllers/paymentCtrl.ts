@@ -264,7 +264,7 @@ export const purchaseTicket = async (
     const ticketId = uuidv4();
 
     const signature = generateTicketSignature(ticketId);
-    const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
     const qrCode = await QRCode.toDataURL(qrCodeData);
 
     const ticket = await TicketInstance.create({

@@ -127,3 +127,24 @@ export const deleteAllTickets = async (
     });
   }
 };
+
+export const getTicketById = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { ticketId } = req.params;
+
+  try {
+    const ticket = await TicketInstance.findOne({ where: { id: ticketId } });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    return res.status(200).json({ ticket });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch tickets", details: error.message });
+  }
+};

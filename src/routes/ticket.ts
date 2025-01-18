@@ -1,14 +1,15 @@
 import express from "express";
-import multer from 'multer';
+import multer from "multer";
 
 import { auth } from "../middlewares/auth";
 import {
   cancelTicket,
   deleteAllTickets,
   getEventTickets,
+  getTicketById,
   validateTicket,
 } from "../controllers/ticketCtrl";
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: "uploads/" });
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.delete("/", deleteAllTickets);
 router.delete("/:ticketId", cancelTicket);
 router.get("/validate-ticket", validateTicket);
 router.get("/events/:eventId/tickets", auth, getEventTickets);
+router.get("/:ticketId", getTicketById);
 
 export default router;

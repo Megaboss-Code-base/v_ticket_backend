@@ -142,9 +142,19 @@ export const purchaseTicket = async (
 
     const ticketId = uuidv4();
 
+    console.log('body7', ticketId)
+
     const signature = generateTicketSignature(ticketId);
+
+    console.log('body8', signature)
+
     const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+
+    console.log('body9', qrCodeData)
+
     const qrCode = await QRCode.toDataURL(qrCodeData);
+
+    console.log('body10', qrCode)
 
     const ticket = await TicketInstance.create({
       id: ticketId,
@@ -163,13 +173,13 @@ export const purchaseTicket = async (
       isScanned: false,
     });
 
-    console.log('body7', ticket)
+    console.log('body11', ticket)
 
     const eventOwner = (await UserInstance.findOne({
       where: { id: event.userId },
     })) as unknown as UserAttribute;
 
-    console.log('body8', eventOwner)
+    console.log('body12', eventOwner)
 
     if (!eventOwner) {
       return res.status(404).json({ error: "Event owner not found" });
@@ -177,7 +187,7 @@ export const purchaseTicket = async (
 
     const tx_ref = generateReference();
 
-    console.log('body9', tx_ref)
+    console.log('body13', tx_ref)
 
     const paymentData = {
       customer: {
@@ -208,7 +218,7 @@ export const purchaseTicket = async (
       ],
     };
 
-    console.log('body10', paymentData)
+    console.log('body14', paymentData)
 
     console.log('flutterbaze', FLUTTERWAVE_BASE_URL)
     console.log('flutterSecretz', FLUTTERWAVE_SECRET_KEY)

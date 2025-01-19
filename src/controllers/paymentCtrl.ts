@@ -186,6 +186,9 @@ export const purchaseTicket = async (
       ],
     };
 
+    console.log('flutterbaze', FLUTTERWAVE_BASE_URL)
+    console.log('flutterSecretz', FLUTTERWAVE_SECRET_KEY)
+
     const response = await axios.post(
       `${FLUTTERWAVE_BASE_URL}/payments`,
       paymentData,
@@ -197,7 +200,7 @@ export const purchaseTicket = async (
       }
     );
     console.log('response', response)
-    
+
     console.log('response2', response.data)
 
     if (response.data && response.data.data && response.data.data.link) {

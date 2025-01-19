@@ -156,6 +156,25 @@ export const purchaseTicket = async (
 
     console.log('body10', qrCode)
 
+    let newTick = {
+      id: ticketId,
+      email,
+      phone,
+      fullName,
+      eventId: event.id,
+      ticketType,
+      price: totalPrice,
+      purchaseDate: new Date(),
+      qrCode,
+      paid: false,
+      currency,
+      attendees: attendees || [{ name: fullName, email }],
+      validationStatus: "invalid",
+      isScanned: false,
+    }
+
+    console.log('body10B', newTick)
+
     const ticket = await TicketInstance.create({
       id: ticketId,
       email,

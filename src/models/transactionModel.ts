@@ -9,7 +9,7 @@ import { db } from "../config";
 import { TicketInstance } from "./ticketModel";
 
 export interface TransactionAttribute {
-  id: string;
+  id: number;
   email: string;
   fullName: string;
   ticketId: string;
@@ -25,7 +25,7 @@ export class TransactionInstance extends Model<
   InferAttributes<TransactionInstance>,
   InferCreationAttributes<TransactionInstance>
 > {
-  declare id: string;
+  declare id: number;
   declare email: string;
   declare fullName: string;
   declare ticketId: string;
@@ -40,10 +40,9 @@ export class TransactionInstance extends Model<
 TransactionInstance.init(
   {
     id: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       primaryKey: true,
       allowNull: false,
-      defaultValue: DataTypes.UUIDV4,
     },
     email: {
       type: DataTypes.STRING,

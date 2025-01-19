@@ -34,6 +34,8 @@ export const purchaseTicket = async (
   const { ticketType, currency, email, phone, fullName, attendees, quantity } =
     req.body;
 
+    console.log('body', req.body)
+
   if (!email || !phone || !fullName || !quantity || quantity < 1) {
     return res
       .status(400)
@@ -194,6 +196,10 @@ export const purchaseTicket = async (
         },
       }
     );
+    console.log('response', response)
+    
+    console.log('response2', response.data)
+
     if (response.data && response.data.data && response.data.data.link) {
       return res.status(200).json({
         link: response.data.data.link,

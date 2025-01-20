@@ -15,17 +15,17 @@ interface EmailOptions {
 
 const sendEmail = async (options: EmailOptions): Promise<void> => {
   const transporter: Transporter = nodemailer.createTransport({
-    // host: process.env.SMTP_HOST,
-    // port: Number(process.env.SMTP_PORT),
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
     // secure: false,
-    service: "gmail",
+    // service: "gmail",
     auth: {
       user: process.env.SMTP_EMAIL,
       pass: process.env.SMTP_PASSWORD,
     },
-    tls: {
-      rejectUnauthorized: false,
-    },
+    // tls: {
+    //   rejectUnauthorized: false,
+    // },
   });
 
   const message: any = {

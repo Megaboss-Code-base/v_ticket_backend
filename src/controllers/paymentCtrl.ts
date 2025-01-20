@@ -390,7 +390,7 @@ export const handlePaymentVerification = async (
         The Event Team
       `;
 
-      const mailSent = await sendEmail({
+      await sendEmail({
         email: ticket.email,
         subject: mailSubject,
         message: mailMessage,
@@ -402,8 +402,6 @@ export const handlePaymentVerification = async (
           },
         ],
       });
-
-      console.log('mail', mailSent)
 
       await transaction.commit();
 

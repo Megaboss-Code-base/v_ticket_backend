@@ -86,7 +86,7 @@ export const purchaseTicket = async (
       const ticketId = uuidv4();
 
       const signature = generateTicketSignature(ticketId);
-      const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+      const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
       const qrCode = await QRCode.toDataURL(qrCodeData);
 
       const ticket = await TicketInstance.create({
@@ -245,8 +245,7 @@ export const handleWebhook = async (
         paymentReference,
         currency,
       });
-      return res.redirect(`${FRONTEND_URL}?transactionId=${transactionId}`);
-      // return res.status(200).json({ transactionId: payload.data.id });
+      return res.redirect(`${FRONTEND_URL}?transactionId=${transactionId}&ticketId=${ticketId}`);
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
     }

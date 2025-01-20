@@ -234,7 +234,10 @@ export const handleWebhook = async (
       const paymentReference = payload.data.flw_ref;
       const currency = payload.data.currency;
       const transactionId = payload.data.id;
-
+      const Id = ticketId
+      // console.log("Transaction ID:", transactionId);
+      // console.log("Ticket ID:", ticketId);
+      
       await TransactionInstance.create({
         id: transactionId,
         email,
@@ -245,7 +248,12 @@ export const handleWebhook = async (
         paymentReference,
         currency,
       });
-      return res.redirect(`${FRONTEND_URL}?transactionId=${transactionId}&ticketId=${ticketId}`);
+      console.log("Redirecting to:", `${FRONTEND_URL}/success?transactionId=${transactionId}&ticketId=${ticketId}`);
+
+
+      return res.redirect(
+        `${FRONTEND_URL}?transactionId=${transactionId}&ticketId=${Id}`
+      );
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
     }
@@ -358,7 +366,7 @@ export const handlePaymentVerification = async (
       });
 
       if (eventOwner) {
-        const earnings = (totalAmount * 0.9).toFixed(2);
+        const earnings = (totalAmount * 0.8865).toFixed(2);
         await NotificationInstance.create(
           {
             id: uuidv4(),
@@ -370,6 +378,13 @@ export const handlePaymentVerification = async (
           { transaction }
         );
       }
+
+      const appOwnerEarnings = parseFloat((totalAmount * 0.0985).toFixed(2));
+
+      await UserInstance.increment(
+        { totalEarnings: appOwnerEarnings },
+        { where: { id: ACCOUNT_OWNER_ID } }
+      );
 
       const mailSubject = `Your Ticket for "${event.title}"`;
       const mailMessage = `

@@ -34,15 +34,11 @@ export const purchaseTicket = async (
   const { ticketType, currency, email, phone, fullName, attendees, quantity } =
     req.body;
 
-    console.log('body1', req.body)
-
   if (!email || !phone || !fullName || !quantity || quantity < 1) {
     return res
       .status(400)
       .json({ error: "Provide all required fields and a valid quantity" });
   }
-
-  console.log('body2', req.body)
 
   if (
     attendees &&
@@ -55,8 +51,6 @@ export const purchaseTicket = async (
 
   try {
     const event = await EventInstance.findOne({ where: { id: eventId } });
-
-    console.log('body3', event)
 
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
@@ -76,8 +70,6 @@ export const purchaseTicket = async (
       (ticket) => ticket.name === ticketType
     );
 
-    console.log('body4', ticketInfo)
-
     if (!ticketInfo) {
       return res.status(400).json({ error: "Invalid ticket type" });
     }
@@ -90,16 +82,12 @@ export const purchaseTicket = async (
 
     const ticketPrice = parseFloat(ticketInfo.price);
 
-    console.log('body5', ticketPrice)
-
     if (ticketPrice === 0) {
       const ticketId = uuidv4();
 
       const signature = generateTicketSignature(ticketId);
       const qrCodeData = `${process.env.BASE_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
       const qrCode = await QRCode.toDataURL(qrCodeData);
-
-      console.log('body6', signature)
 
       const ticket = await TicketInstance.create({
         id: ticketId,
@@ -117,8 +105,6 @@ export const purchaseTicket = async (
         validationStatus: "valid",
         isScanned: false,
       });
-
-      console.log('body7', ticket)
 
       ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
       ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
@@ -138,42 +124,13 @@ export const purchaseTicket = async (
 
     const totalPrice = ticketPrice * quantity;
 
-    console.log('body6', totalPrice)
-
     const ticketId = uuidv4();
-
-    console.log('body7', ticketId)
 
     const signature = generateTicketSignature(ticketId);
 
-    console.log('body8', signature)
-
     const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
 
-    console.log('body9', qrCodeData)
-
     const qrCode = await QRCode.toDataURL(qrCodeData);
-
-    console.log('body10', qrCode)
-
-    let newTick = {
-      id: ticketId,
-      email,
-      phone,
-      fullName,
-      eventId: event.id,
-      ticketType,
-      price: totalPrice,
-      purchaseDate: new Date(),
-      qrCode,
-      paid: false,
-      currency,
-      attendees: attendees || [{ name: fullName, email }],
-      validationStatus: "invalid",
-      isScanned: false,
-    }
-
-    console.log('body10B', newTick)
 
     const ticket = await TicketInstance.create({
       id: ticketId,
@@ -192,21 +149,15 @@ export const purchaseTicket = async (
       isScanned: false,
     });
 
-    console.log('body11', ticket)
-
     const eventOwner = (await UserInstance.findOne({
       where: { id: event.userId },
     })) as unknown as UserAttribute;
-
-    console.log('body12', eventOwner)
 
     if (!eventOwner) {
       return res.status(404).json({ error: "Event owner not found" });
     }
 
     const tx_ref = generateReference();
-
-    console.log('body13', tx_ref)
 
     const paymentData = {
       customer: {
@@ -237,11 +188,6 @@ export const purchaseTicket = async (
       ],
     };
 
-    console.log('body14', paymentData)
-
-    console.log('flutterbaze', FLUTTERWAVE_BASE_URL)
-    console.log('flutterSecretz', FLUTTERWAVE_SECRET_KEY)
-
     const response = await axios.post(
       `${FLUTTERWAVE_BASE_URL}/payments`,
       paymentData,
@@ -252,9 +198,6 @@ export const purchaseTicket = async (
         },
       }
     );
-    console.log('response', response)
-
-    console.log('response2', response.data)
 
     if (response.data && response.data.data && response.data.data.link) {
       return res.status(200).json({

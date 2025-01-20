@@ -44,7 +44,13 @@ module.exports = {
     port: dbConfig.port || 5432, // Default to 5432 if not specified
     dialect: 'postgres',
     migrationStorageTableName: 'sequelize_meta',
-    migrations: [path.resolve(__dirname, 'src/migrations/*.ts')], // Correct path for migrations
+    migrations: [path.resolve(__dirname, './migrations/*.js')], // Correct path for migrations
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false, // Allow self-signed certificates
+      },
+    },
   },
   production: {
     username: dbConfig.username,

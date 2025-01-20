@@ -70,7 +70,7 @@ TicketInstance.init(
       allowNull: false,
     },
     qrCode: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: false,
       defaultValue: "",
     },

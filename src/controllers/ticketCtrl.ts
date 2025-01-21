@@ -89,7 +89,7 @@ export const validateTicket = async (
     await ticket.save();
 
     return res.status(200).json({
-      message: "Ticket successfully validated",
+      message: "Ticket successfully scanned",
       ticket,
     });
   } catch (error: any) {

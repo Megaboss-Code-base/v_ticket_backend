@@ -171,7 +171,7 @@ export const purchaseTicket = async (
       amount: totalPrice,
       currency,
       tx_ref,
-      redirect_url: FRONTEND_URL,
+      redirect_url: `${FRONTEND_URL}/success?ticketId=${ticketId}`,
       subaccounts: [
         {
           id: process.env.APP_OWNER_SUBACCOUNT_ID,
@@ -246,8 +246,9 @@ export const handleWebhook = async (
         paymentReference,
         currency,
       });
-      return res.redirect(
-        `${FRONTEND_URL}/success?transactionId=${transactionId}?ticketId=${ticketId}`
+      return res.status(200).json(
+        `
+        Webhook completed successfully`
       );
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
@@ -351,8 +352,6 @@ export const handlePaymentVerification = async (
           { ticketType: event.ticketType },
           { where: { id: event.id }, transaction }
         );
-
-        console.log("Updated TicketType:", event.ticketType);
       } else {
         throw new Error("Ticket type not found in the event");
       }

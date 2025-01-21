@@ -86,7 +86,7 @@ export const purchaseTicket = async (
       const ticketId = uuidv4();
 
       const signature = generateTicketSignature(ticketId);
-      const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+      const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
       const qrCode = await QRCode.toDataURL(qrCodeData);
 
       const ticket = await TicketInstance.create({
@@ -128,7 +128,7 @@ export const purchaseTicket = async (
 
     const signature = generateTicketSignature(ticketId);
 
-    const qrCodeData = `${process.env.BASE_URL}/api/v1/tickets/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
 
     const qrCode = await QRCode.toDataURL(qrCodeData);
 
@@ -234,10 +234,8 @@ export const handleWebhook = async (
       const paymentReference = payload.data.flw_ref;
       const currency = payload.data.currency;
       const transactionId = payload.data.id;
-      const Id = ticketId
-      // console.log("Transaction ID:", transactionId);
-      // console.log("Ticket ID:", ticketId);
-      
+      const Id = ticketId;
+
       await TransactionInstance.create({
         id: transactionId,
         email,
@@ -248,11 +246,8 @@ export const handleWebhook = async (
         paymentReference,
         currency,
       });
-      console.log("Redirecting to:", `${FRONTEND_URL}/success?transactionId=${transactionId}&ticketId=${ticketId}`);
-
-
       return res.redirect(
-        `${FRONTEND_URL}?transactionId=${transactionId}&ticketId=${Id}`
+        `${FRONTEND_URL}/success?transactionId=${transactionId}?ticketId=${ticketId}`
       );
     } else {
       return res.status(400).json({ error: "Payment was not successful" });
@@ -348,14 +343,16 @@ export const handlePaymentVerification = async (
 
         event.ticketType[ticketTypeIndex] = {
           ...ticketType,
-          sold: (currentSold + quantity).toString(),
-          quantity: (currentQuantity - quantity).toString(),
+          sold: (currentSold + parseInt(quantity, 10)).toString(),
+          quantity: (currentQuantity - parseInt(quantity, 10)).toString(),
         };
 
         await EventInstance.update(
           { ticketType: event.ticketType },
           { where: { id: event.id }, transaction }
         );
+
+        console.log("Updated TicketType:", event.ticketType);
       } else {
         throw new Error("Ticket type not found in the event");
       }

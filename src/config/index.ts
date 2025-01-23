@@ -54,12 +54,12 @@ export function generateRandomAlphaNumeric(length: any) {
 }
 
 export function generateTicketSignature(ticketId: string): string {
-  const secret = process.env.TICKET_SECRET_KEY || "your_secret_key";
+  const secret = process.env.TICKET_SECRET_KEY!;
   return crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
 }
 
 export function verifyTicketSignature(ticketId: string, signature: string): boolean {
-  const secret = process.env.SECRET_KEY || "your_secret_key";
+  const secret = process.env.TICKET_SECRET_KEY!;
   const expectedSignature = crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
   return signature === expectedSignature;
 }

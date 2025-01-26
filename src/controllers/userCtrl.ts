@@ -270,13 +270,13 @@ export const login = async (req: Request, res: Response): Promise<any> => {
     const token = jwt.sign(
       { id: user.id, email: user.email!, role: user.role },
       JWT_SECRET!,
-      { expiresIn: EXPIRESIN! }
+      { expiresIn: "1h" }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id, email: user.email!, role: user.role },
       JWT_SECRET!,
-      { expiresIn: REFRESH_EXPIRESIN! }
+      { expiresIn: "7h" }
     );
 
     user.password = undefined!;

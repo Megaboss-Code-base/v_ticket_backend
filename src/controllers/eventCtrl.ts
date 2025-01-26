@@ -80,50 +80,59 @@ export const updateEvent = async (
   req: JwtPayload,
   res: Response
 ): Promise<any> => {
-  try {
-    const { id } = req.params;
+  const { id } = req.params;
+  const userId = req.user;
 
-    const { error, value } = updateEventValidationSchema.validate(req.body);
-    if (error) {
+  try {
+    const user = (await UserInstance.findOne({
+      where: { id: userId },
+    })) as unknown as UserAttribute;
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Please log in to update an event" });
+    }
+
+    const validateResult = updateEventValidationSchema.validate(req.body);
+    if (validateResult.error) {
       return res.status(400).json({
         message: "Validation Error",
-        error: error.details[0].message,
+        error: validateResult.error.details[0].message,
       });
     }
 
-    const { title, description, date, location, ticketType } = value;
+    const {
+      title,
+      description,
+      date,
+      time,
+      venue,
+      location,
+      ticketType,
+      socialMediaLinks,
+    } = validateResult.value;
 
     const event = await EventInstance.findOne({
       where: {
         id,
-        userId: req.user,
+        userId,
       },
     });
 
     if (!event) {
-      return res.status(404).json({
-        message: "Event not found or User not authorized",
-      });
-    }
-
-    if (
-      event.ticketType &&
-      event.ticketType.some((ticket: any) => parseInt(ticket.sold) > 0)
-    ) {
-      if (ticketType) {
-        return res.status(400).json({
-          message:
-            "Cannot update ticketType because some tickets have been sold",
-        });
-      }
+      return res
+        .status(404)
+        .json({ message: "Event not found or User not authorized" });
     }
 
     const updatedData: any = {};
 
     if (title) updatedData.title = title;
     if (description) updatedData.description = description;
-    if (req.file?.path) updatedData.image = req.file?.path;
     if (date) updatedData.date = date;
+    if (time) updatedData.time = time;
+    if (venue) updatedData.venue = venue;
     if (location) updatedData.location = location;
 
     if (ticketType) {
@@ -132,29 +141,42 @@ export const updateEvent = async (
           typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
 
         if (Array.isArray(ticketTypeArray)) {
-          updatedData.ticketType = ticketTypeArray.map((ticket: any) => ({
-            ...ticket,
-            sold: "0",
-          }));
+          updatedData.ticketType = ticketTypeArray;
         } else {
-          return res.status(400).json({ Error: "Invalid ticketType format" });
+          return res.status(400).json({ message: "Invalid ticketType format" });
         }
-      } catch (err) {
-        return res.status(400).json({ Error: "Failed to parse ticketType" });
+      } catch (error:any) {
+        return res
+          .status(400)
+          .json({ message: "Failed to parse ticketType", error: error.message });
       }
     }
 
-    if (Object.keys(updatedData).length === 0) {
-      return res.status(400).json({ Error: "No valid fields to update" });
+    if (socialMediaLinks) {
+      try {
+        updatedData.socialMediaLinks =
+          typeof socialMediaLinks === "string"
+            ? JSON.parse(socialMediaLinks)
+            : socialMediaLinks;
+      } catch (error) {
+        return res.status(400).json({
+          message:
+            "Invalid format for socialMediaLinks. Please send as a JSON object.",
+        });
+      }
     }
 
-    await EventInstance.update(updatedData, {
-      where: { id },
-    });
+    if (req.file?.path) {
+      updatedData.image = req.file.path;
+    }
 
-    const updatedEvent = await EventInstance.findOne({
-      where: { id },
-    });
+    if (Object.keys(updatedData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update" });
+    }
+
+    await EventInstance.update(updatedData, { where: { id } });
+
+    const updatedEvent = await EventInstance.findOne({ where: { id } });
 
     return res.status(200).json({
       message: "Event updated successfully",

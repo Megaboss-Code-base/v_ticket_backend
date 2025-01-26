@@ -46,7 +46,7 @@ export const validate = <T>(
   });
 
   if (error) {
-    return { value, error: error.details.map((err) => err.message).join(", ") };
+    return { value, error: error.details.map((err:any) => err.message).join(", ") };
   }
 
   return { value };
@@ -66,12 +66,19 @@ export const eventValidationSchema = Joi.object({
   ),
   });
 
-export const updateEventValidationSchema = Joi.object({
-  title: Joi.string().optional(),
-  description: Joi.string().optional(),
-  date: Joi.date().optional(),
-  location: Joi.string().optional(),
-  ticketType: Joi.string().optional(), 
-});
+  export const updateEventValidationSchema = Joi.object({
+    title: Joi.string().optional(),
+    description: Joi.string().optional(),
+    date: Joi.date().optional(),
+    location: Joi.string().optional(),
+    time: Joi.string().optional(),
+    venue: Joi.string().optional(),
+    image: Joi.string().optional(),
+    gallery: Joi.array().items(Joi.string()).optional(),
+    socialMediaLinks: Joi.alternatives()
+      .try(Joi.object().optional(), Joi.string().optional())
+      .optional(),
+    ticketType: Joi.string().optional(),
+  });
 
 

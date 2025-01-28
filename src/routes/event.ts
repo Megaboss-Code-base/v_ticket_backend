@@ -8,6 +8,7 @@ import {
   getAllEvents,
   getAllMyEvents,
   getEventById,
+  getEventBySlug,
   getTrendingEvents,
   updateEvent,
 } from "../controllers/eventCtrl";
@@ -20,6 +21,7 @@ router.get("/all-events", getAllEvents);
 router.get("/my-events", auth, getAllMyEvents);
 router.get("/sorted-by-latest", getTrendingEvents);
 router.post("/moderators", auth, assignModerator);
+router.get("/slug/:slug", getEventBySlug);
 router.get("/:id", getEventById);
 router.patch("/:id", auth, upload.array("gallery", 10), updateEvent);
 router.delete("/:id", auth, deleteEvent);

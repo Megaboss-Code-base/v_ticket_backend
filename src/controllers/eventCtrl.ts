@@ -53,6 +53,31 @@ export const getEventById = async (
   }
 };
 
+export const getEventBySlug = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const { slug } = req.params;
+
+    const event = await EventInstance.findOne({
+      where: {
+        slug,
+      },
+    });
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    return res.status(200).json({ event });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ message: "Error fetching event", error: error.message });
+  }
+};
+
 export const getAllMyEvents = async (
   req: JwtPayload,
   res: Response

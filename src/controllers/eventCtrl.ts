@@ -101,120 +101,6 @@ export const getAllMyEvents = async (
   }
 };
 
-export const updateEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const { id } = req.params;
-  const userId = req.user;
-
-  try {
-    const user = (await UserInstance.findOne({
-      where: { id: userId },
-    })) as unknown as UserAttribute;
-
-    if (!user) {
-      return res
-        .status(404)
-        .json({ message: "Please log in to update an event" });
-    }
-
-    const validateResult = updateEventValidationSchema.validate(req.body);
-    if (validateResult.error) {
-      return res.status(400).json({
-        message: "Validation Error",
-        error: validateResult.error.details[0].message,
-      });
-    }
-
-    const {
-      title,
-      description,
-      date,
-      time,
-      venue,
-      location,
-      ticketType,
-      socialMediaLinks,
-    } = validateResult.value;
-
-    const event = await EventInstance.findOne({
-      where: {
-        id,
-        userId,
-      },
-    });
-
-    if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not authorized" });
-    }
-
-    const updatedData: any = {};
-
-    if (title) updatedData.title = title;
-    if (description) updatedData.description = description;
-    if (date) updatedData.date = date;
-    if (time) updatedData.time = time;
-    if (venue) updatedData.venue = venue;
-    if (location) updatedData.location = location;
-
-    if (ticketType) {
-      try {
-        const ticketTypeArray =
-          typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
-
-        if (Array.isArray(ticketTypeArray)) {
-          updatedData.ticketType = ticketTypeArray;
-        } else {
-          return res.status(400).json({ message: "Invalid ticketType format" });
-        }
-      } catch (error:any) {
-        return res
-          .status(400)
-          .json({ message: "Failed to parse ticketType", error: error.message });
-      }
-    }
-
-    if (socialMediaLinks) {
-      try {
-        updatedData.socialMediaLinks =
-          typeof socialMediaLinks === "string"
-            ? JSON.parse(socialMediaLinks)
-            : socialMediaLinks;
-      } catch (error) {
-        return res.status(400).json({
-          message:
-            "Invalid format for socialMediaLinks. Please send as a JSON object.",
-        });
-      }
-    }
-
-    if (req.file?.path) {
-      updatedData.image = req.file.path;
-    }
-
-    if (Object.keys(updatedData).length === 0) {
-      return res.status(400).json({ message: "No valid fields to update" });
-    }
-
-    await EventInstance.update(updatedData, { where: { id } });
-
-    const updatedEvent = await EventInstance.findOne({ where: { id } });
-
-    return res.status(200).json({
-      message: "Event updated successfully",
-      event: updatedEvent,
-    });
-  } catch (error: any) {
-    return res.status(500).json({
-      message: "Error updating event",
-      error: error.message,
-    });
-  }
-};
-
 export const getTrendingEvents = async (
   req: Request,
   res: Response
@@ -510,5 +396,132 @@ export const deleteExpiredEvents = async () => {
     console.log(`${expiredEvents.length} expired events processed.`);
   } catch (error) {
     console.error("Error deleting expired events:", error);
+  }
+};
+
+export const updateEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { id } = req.params;
+  const userId = req.user;
+
+  try {
+    const user = await UserInstance.findOne({ where: { id: userId } });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Please log in to update an event" });
+    }
+
+    const validateResult = updateEventValidationSchema.validate(req.body);
+    if (validateResult.error) {
+      return res.status(400).json({
+        message: "Validation Error",
+        error: validateResult.error.details[0].message,
+      });
+    }
+
+    const {
+      title,
+      description,
+      date,
+      time,
+      venue,
+      location,
+      ticketType,
+      socialMediaLinks,
+    } = validateResult.value;
+
+    const event = await EventInstance.findOne({
+      where: { id, userId },
+    });
+
+    if (!event) {
+      return res
+        .status(404)
+        .json({ message: "Event not found or User not authorized" });
+    }
+
+    const updatedData: any = {};
+
+    if (title) {
+      updatedData.title = title;
+      updatedData.slug = slugify(String(title)).toLowerCase();
+    }
+    if (description) updatedData.description = description;
+    if (date) updatedData.date = date;
+    if (time) updatedData.time = time;
+    if (venue) updatedData.venue = venue;
+    if (location) updatedData.location = location;
+
+    if (ticketType) {
+      try {
+        const ticketTypeArray =
+          typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
+
+        if (Array.isArray(ticketTypeArray)) {
+          updatedData.ticketType = ticketTypeArray;
+        } else {
+          return res.status(400).json({ message: "Invalid ticketType format" });
+        }
+      } catch (error: any) {
+        return res.status(400).json({
+          message: "Failed to parse ticketType",
+          error: error.message,
+        });
+      }
+    }
+
+    if (socialMediaLinks) {
+      try {
+        updatedData.socialMediaLinks =
+          typeof socialMediaLinks === "string"
+            ? JSON.parse(socialMediaLinks)
+            : socialMediaLinks;
+      } catch (error) {
+        return res.status(400).json({
+          message:
+            "Invalid format for socialMediaLinks. Please send as a JSON object.",
+        });
+      }
+    }
+
+    if (req.files && Array.isArray(req.files)) {
+      const existingGallery = event.gallery || [];
+      const newGalleryUrls: string[] = [];
+
+      for (const file of req.files) {
+        const uploadResult = await cloudinary.uploader.upload(file.path);
+
+        newGalleryUrls.push(uploadResult.secure_url);
+      }
+
+      updatedData.gallery = [...existingGallery, ...newGalleryUrls];
+    }
+
+    if (req.file?.path) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path);
+      updatedData.image = uploadResult.secure_url;
+    }
+
+    if (Object.keys(updatedData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update" });
+    }
+
+    await EventInstance.update(updatedData, { where: { id } });
+
+    const updatedEvent = await EventInstance.findOne({ where: { id } });
+
+    return res.status(200).json({
+      message: "Event updated successfully",
+      event: updatedEvent,
+    });
+  } catch (error: any) {
+    console.error("Error updating event:", error.message);
+    return res.status(500).json({
+      message: "Error updating event",
+      error: error.message,
+    });
   }
 };

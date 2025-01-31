@@ -72,13 +72,3 @@ export const validateFlutterwaveWebhook = (payload: string, signature: string) =
   return hash === signature;
 };
 
-// In handleWebhook
-// const isValidWebhook = validateFlutterwaveWebhook(
-//   JSON.stringify(req.body),
-//   req.headers["verif-hash"] as string
-// );
-
-// if (!isValidWebhook) {
-//   return res.status(401).json({ error: "Invalid webhook signature" });
-// }
-

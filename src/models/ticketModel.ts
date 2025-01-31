@@ -117,7 +117,7 @@ TicketInstance.init(
       },
     },
     validationStatus: {
-      type: DataTypes.ENUM("valid", "invalid", "used", "expired"), // Changed to ENUM
+      type: DataTypes.ENUM("valid", "invalid", "used", "expired"),
       allowNull: false,
       defaultValue: "invalid",
     },

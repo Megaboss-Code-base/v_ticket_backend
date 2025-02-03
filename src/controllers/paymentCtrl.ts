@@ -175,7 +175,7 @@ export const purchaseTicket = async (
       subaccounts: [
         {
           id: process.env.APP_OWNER_SUBACCOUNT_ID,
-          transaction_split_ratio: 10,
+          transaction_split_ratio: 12,
         },
         {
           bank_account: {
@@ -183,7 +183,7 @@ export const purchaseTicket = async (
             account_number: eventOwner.account_number,
           },
           country: eventOwner.country,
-          transaction_split_ratio: 90,
+          transaction_split_ratio: 88,
         },
       ],
     };

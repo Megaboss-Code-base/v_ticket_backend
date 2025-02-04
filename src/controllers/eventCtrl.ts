@@ -525,3 +525,51 @@ export const updateEvent = async (
     });
   }
 };
+
+export const editEventImg = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user;
+
+    const event = await EventInstance.findOne({
+      where: {
+        id,
+        userId,
+      },
+    });
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found or unauthorized",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Please upload an image" });
+    }
+
+    const uploadResult = await cloudinary.uploader.upload(req.file.path);
+    const newImageUrl = uploadResult.secure_url;
+
+    if (event.image) {
+      const oldImagePublicId = event.image.split("/").pop()?.split(".")[0];
+      if (oldImagePublicId) {
+        await cloudinary.uploader.destroy(oldImagePublicId);
+      }
+    }
+
+    await event.update({ image: newImageUrl });
+
+    return res.status(200).json({
+      message: "Event image updated successfully",
+      image: newImageUrl,
+    });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ message: "Error fetching events", error: error.message });
+  }
+};

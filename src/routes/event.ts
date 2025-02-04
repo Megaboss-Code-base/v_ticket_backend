@@ -5,6 +5,7 @@ import {
   assignModerator,
   createEvent,
   deleteEvent,
+  editEventImg,
   getAllEvents,
   getAllMyEvents,
   getEventById,
@@ -23,6 +24,7 @@ router.get("/sorted-by-latest", getTrendingEvents);
 router.post("/moderators", auth, assignModerator);
 router.get("/slug/:slug", getEventBySlug);
 router.get("/:id", getEventById);
+router.patch("/image/:id", auth, upload.single("file"), editEventImg);
 router.patch("/:id", auth, upload.array("gallery", 10), updateEvent);
 router.delete("/:id", auth, deleteEvent);
 

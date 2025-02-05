@@ -362,7 +362,7 @@ export const handlePaymentVerification = async (
       });
 
       if (eventOwner) {
-        const earnings = (totalAmount * 0.8865).toFixed(2);
+        const earnings = (totalAmount * 0.8668).toFixed(2);
         await NotificationInstance.create(
           {
             id: uuidv4(),
@@ -375,7 +375,7 @@ export const handlePaymentVerification = async (
         );
       }
 
-      const appOwnerEarnings = parseFloat((totalAmount * 0.0985).toFixed(2));
+      const appOwnerEarnings = parseFloat((totalAmount * 0.1182).toFixed(2));
 
       await UserInstance.increment(
         { totalEarnings: appOwnerEarnings },

@@ -41,7 +41,10 @@ export const FLUTTERWAVE_BASE_URL = process.env.FLUTTERWAVE_BASE_URL!;
 export const ACCOUNT_ID = process.env.ACCOUNT_ID!;
 export const FLUTTERWAVE_HASH_SECRET = process.env.FLUTTERWAVE_HASH_SECRET!;
 export const ACCOUNT_OWNER_ID = process.env.ACCOUNT_OWNER_ID! as string;
-
+export const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+export const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY!;
+export const PAYSTACK_BASE_URL = process.env.PAYSTACK_BASE_URL!;
+// export const validatePaystackWebhook = process.env.validatePaystackWebhook!;
 export function generateRandomAlphaNumeric(length: any) {
   let result = "";
   const characters =
@@ -58,13 +61,22 @@ export function generateTicketSignature(ticketId: string): string {
   return crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
 }
 
-export function verifyTicketSignature(ticketId: string, signature: string): boolean {
+export function verifyTicketSignature(
+  ticketId: string,
+  signature: string
+): boolean {
   const secret = process.env.TICKET_SECRET_KEY!;
-  const expectedSignature = crypto.createHmac("sha256", secret).update(ticketId).digest("hex");
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(ticketId)
+    .digest("hex");
   return signature === expectedSignature;
 }
 
-export const validateFlutterwaveWebhook = (payload: string, signature: string) => {
+export const validateFlutterwaveWebhook = (
+  payload: string,
+  signature: string
+) => {
   const hash = crypto
     .createHmac("sha256", FLUTTERWAVE_HASH_SECRET)
     .update(payload)
@@ -72,3 +84,19 @@ export const validateFlutterwaveWebhook = (payload: string, signature: string) =
   return hash === signature;
 };
 
+export const validatePaystackWebhook = (
+  signature: string,
+  payload: string
+): boolean => {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY; // Your Paystack secret key
+  if (!secretKey) {
+    throw new Error("PAYSTACK_SECRET_KEY is not set in environment variables");
+  }
+
+  const generatedHash = crypto
+    .createHmac("sha512", secretKey)
+    .update(payload)
+    .digest("hex");
+
+  return generatedHash === signature;
+};

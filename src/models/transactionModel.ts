@@ -40,9 +40,10 @@ export class TransactionInstance extends Model<
 TransactionInstance.init(
   {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.BIGINT,
       primaryKey: true,
       allowNull: false,
+      autoIncrement: true,
     },
     email: {
       type: DataTypes.STRING,
@@ -105,4 +106,3 @@ TransactionInstance.belongsTo(TicketInstance, {
 });
 
 export default TransactionInstance;
-

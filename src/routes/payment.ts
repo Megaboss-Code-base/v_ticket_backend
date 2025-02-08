@@ -1,5 +1,9 @@
 import express from "express";
-import { handlePaymentVerification, handleUnifiedWebhook, handleWebhook, purchaseTicket } from "../controllers/paymentCtrl";
+import {
+  handlePaymentVerification,
+  handleUnifiedWebhook,
+  purchaseTicket,
+} from "../controllers/paymentCtrl";
 
 const router = express.Router();
 

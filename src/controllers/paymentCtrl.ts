@@ -170,7 +170,7 @@ export const purchaseTicket = async (
     // Attempt to create a Flutterwave payment link
     try {
       const flutterwaveResponse = await axios.post(
-        `${FLUTTERWAVE_BASE_URL}/payments`,
+        `${FLUTTERWAVE_BASE_URL}/payments/api`,
         {
           customer: {
             name: fullName,

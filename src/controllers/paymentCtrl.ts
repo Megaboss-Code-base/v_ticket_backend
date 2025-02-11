@@ -60,7 +60,7 @@ export const purchaseTicket = async (
 
   if (
     attendees &&
-    (!Array.isArray(attendees) || attendees.length !== quantity)
+    (!Array.isArray(attendees) || attendees.length !== quantity -1)
   ) {
     return res.status(400).json({
       error: "The number of attendees must match the ticket quantity.",

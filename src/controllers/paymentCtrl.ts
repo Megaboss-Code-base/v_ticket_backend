@@ -60,7 +60,7 @@ export const purchaseTicket = async (
 
   if (
     attendees &&
-    (!Array.isArray(attendees) || attendees.length !== quantity -1)
+    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
   ) {
     return res.status(400).json({
       error: "The number of attendees must match the ticket quantity.",
@@ -74,12 +74,30 @@ export const purchaseTicket = async (
       return res.status(404).json({ error: "Event not found" });
     }
 
-    if (new Date() > new Date(event.date)) {
+    // if (new Date() > new Date(event.date)) {
+    //   return res
+    //     .status(400)
+    //     .json({ error: "Cannot purchase tickets for expired events" });
+    // }
+
+    const eventDate = new Date(event.date);
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const diffInTime = today.getTime() - eventDate.getTime();
+    const diffInDays = diffInTime / (1000 * 60 * 60 * 24);
+
+    if (diffInDays >= 1) {
       return res
         .status(400)
         .json({ error: "Cannot purchase tickets for expired events" });
     }
 
+    //
+    // end
+    //
     if (!Array.isArray(event.ticketType)) {
       return res.status(400).json({ error: "Invalid ticket type structure" });
     }
@@ -446,7 +464,6 @@ export const handlePaymentVerification = async (
         getCustomFieldValue(customFields, "quantity") || "1",
         10
       );
-
     } else {
       return res.status(400).json({ error: "Missing transaction identifier" });
     }

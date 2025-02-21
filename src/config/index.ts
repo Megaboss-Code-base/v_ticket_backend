@@ -19,6 +19,13 @@ export const db = new Sequelize(process.env.DBCONNECTION_STRING!, {
     : {
         ssl: false,
       },
+  pool: {
+    max: 50,
+    min: 5,
+    acquire: 30000, 
+    idle: 10000,
+  },
+
 });
 
 export const URL = process.env.URL as string;

@@ -58,15 +58,14 @@ import { check, sleep } from "k6";
 // Load test configuration
 export const options = {
   stages: [
-  //   { duration: "20s", target: 2500 }, // Ramp up to 10 users over 10 seconds
-  //   { duration: "30s", target: 5000 }, // Stay at 50 users for 30 seconds
-  //   { duration: "20s", target: 2500 }, // Stay at 50 users for 30 seconds
-  //   { duration: "20s", target: 0 },// Ramp down to 0 users over 10 seconds
-  // ],
-  { duration: "30s", target: 2500 }, // Ramp up to 10 users over 10 seconds
-  { duration: "40s", target: 5000 }, // Stay at 50 users for 30 seconds
-  { duration: "30s", target: 0 }, // Ramp down to 0 users over 10 seconds
-],
+    { duration: "30s", target: 1000 }, // Ramp up to 10 users over 10 seconds
+    { duration: "40s", target: 2500 }, // Stay at 50 users for 30 seconds
+    { duration: "30s", target: 0 }, 
+    // { duration: "20s", target: 2500 }, // Ramp up to 10 users over 10 seconds
+    // { duration: "30s", target: 5000 }, // Stay at 50 users for 30 seconds
+    // // { duration: "20s", target: 2500 }, // Stay at 50 users for 30 seconds
+    // { duration: "20s", target: 0 },// Ramp down to 0 users over 10 seconds
+  ],
 };
 
 export default function () {

@@ -10,3 +10,4 @@ npx sequelize-cli db:migrate:undo --config config.js
 https://virtual-ticket-two.vercel.app/dashboard
 
 
+redisDB=https://cloud.redis.io/#/databases

@@ -17,25 +17,37 @@ import notificationRouter from "./routes/notification";
 import paymentRoutes from "./routes/payment";
 import { deleteExpiredEvents } from "./controllers/eventCtrl";
 
+// const Redis = require("ioredis");
+
+// // Use the REDIS_URL environment variable provided by Render
+// const redisUrl = process.env.REDIS_URL;
+
+// if (!redisUrl) {
+//   throw new Error("REDIS_URL is not set");
+// }
+
+// const redis = new Redis(redisUrl);
+
+// redis.on("connect", () => {
+//   console.log("Successfully connected to Redis!");
+// });
+
+// // Listen for the 'error' event to catch any connection errors
+// redis.on("error", (err:any) => {
+//   console.error("Redis connection error:", err);
+// });
+
 const Redis = require("ioredis");
 
-// Use the REDIS_URL environment variable provided by Render
-const redisUrl = process.env.REDIS_URL;
+// Load from environment variables
+const REDIS_URL = process.env.REDIS_URL;
 
-if (!redisUrl) {
-  throw new Error("REDIS_URL is not set");
-}
+const redis = new Redis(REDIS_URL);
 
-const redis = new Redis(redisUrl);
+redis.ping()
+  .then(() => console.log("Successfully connected to Redis!"))
+  .catch((err:any) => console.error("Redis connection failed:", err));
 
-redis.on("connect", () => {
-  console.log("Successfully connected to Redis!");
-});
-
-// Listen for the 'error' event to catch any connection errors
-redis.on("error", (err:any) => {
-  console.error("Redis connection error:", err);
-});
 
 db.sync()
   .then(() => console.log("✅ Database connected successfully"))

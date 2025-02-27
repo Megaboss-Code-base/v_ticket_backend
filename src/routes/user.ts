@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  allUsers,
   changePassword,
   getMonthlyRegistrations,
   getProfile,
@@ -25,6 +26,17 @@ userRouter.patch("/password-recovery", passwordRecovery);
 userRouter.get("/profile", auth, getProfile);
 userRouter.patch("/profile", auth, updateProfile);
 userRouter.patch("/upload-image", auth, upload.single("file"), uploadPicture);
-userRouter.get("/registrations/monthly",auth, adminAuth, getMonthlyRegistrations);
+userRouter.get(
+  "/registrations/monthly",
+  auth,
+  adminAuth,
+  getMonthlyRegistrations
+);
+userRouter.get(
+  "/all-users",
+  // auth,
+  // adminAuth,
+  allUsers
+);
 
 export default userRouter;

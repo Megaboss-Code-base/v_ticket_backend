@@ -582,3 +582,18 @@ export const getMonthlyRegistrations = async (
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const allUsers = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const registrations = await UserInstance.findAll({
+      attributes: { exclude: ["password","totalEarnings","userValidationSecret"] },
+    });
+
+    return res
+      .status(200)
+      .json({ count: registrations.length, data: registrations });
+  } catch (error: any) {
+    console.error("Error fetching monthly registrations:", error.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};

@@ -110,7 +110,8 @@ export const register = async (req: Request, res: Response): Promise<any> => {
 
     return res.status(201).json({
       message:
-        "User created successfully. Please check your email to verify your account.",
+        "User created successfully.",
+        // "User created successfully. Please check your email to verify your account.",
       user: userWithoutSensitiveData,
     });
   } catch (error: any) {

@@ -44,6 +44,8 @@ export const ACCOUNT_OWNER_ID = process.env.ACCOUNT_OWNER_ID! as string;
 export const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 export const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY!;
 export const PAYSTACK_BASE_URL = process.env.PAYSTACK_BASE_URL!;
+export const SMTPEXPRESS_PROJECT_ID = process.env.SMTPEXPRESS_PROJECT_ID! as string;
+export const SMTPEXPRESS_PROJECT_SECRET = process.env.SMTPEXPRESS_PROJECT_SECRET! as string;
 // export const validatePaystackWebhook = process.env.validatePaystackWebhook!;
 export function generateRandomAlphaNumeric(length: any) {
   let result = "";

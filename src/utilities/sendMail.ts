@@ -1,4 +1,5 @@
-import nodemailer, { Transporter } from "nodemailer";
+import { createClient } from "smtpexpress";
+import { SMTPEXPRESS_PROJECT_ID, SMTPEXPRESS_PROJECT_SECRET } from "../config";
 
 interface EmailOptions {
   email: string;
@@ -13,33 +14,35 @@ interface EmailOptions {
   }[];
 }
 
-const sendEmail = async (options: EmailOptions): Promise<void> => {
-  const transporter: Transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    // secure: false,
-    // service: "gmail",
-    auth: {
-      user: process.env.SMTP_EMAIL,
-      pass: process.env.SMTP_PASSWORD,
-    },
-    // tls: {
-    //   rejectUnauthorized: false,
-    // },
-  });
+const smtpexpressClient = createClient({
+  projectId: SMTPEXPRESS_PROJECT_ID,
+  projectSecret: SMTPEXPRESS_PROJECT_SECRET,
+});
 
-  const message: any = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
-    to: options.email,
+const sendEmail = async (options: EmailOptions): Promise<void> => {
+  const emailData: any = {
     subject: options.subject,
-    text: options.message,
-    isHtml: options.isHtml,
-    attachments: options.attachments,
+    message: options.isHtml ? undefined : options.message,
+    htmlMessage: options.isHtml ? options.message : undefined,
+    sender: {
+      name: process.env.FROM_NAME,
+      email: process.env.FROM_EMAIL,
+    },
+    recipients: options.email,
   };
 
-  const info = await transporter.sendMail(message);
+  if (options.attachments) {
+    emailData.attachments = options.attachments.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+      encoding: a.encoding,
+    }));
+  }
 
-  console.log("Message sent: %s", info.messageId);
+  await smtpexpressClient.sendApi.sendMail(emailData);
+
+  console.log(`Email sent to ${options.email}`);
 };
 
 export default sendEmail;

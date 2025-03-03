@@ -20,6 +20,11 @@ const smtpexpressClient = createClient({
 });
 
 const sendEmail = async (options: EmailOptions): Promise<void> => {
+  console.log("Using SMTPExpress Credentials:", {
+    projectId: SMTPEXPRESS_PROJECT_ID,
+    projectSecret: SMTPEXPRESS_PROJECT_SECRET,
+  });
+
   const emailData: any = {
     subject: options.subject,
     message: options.isHtml ? undefined : options.message,
@@ -40,9 +45,17 @@ const sendEmail = async (options: EmailOptions): Promise<void> => {
     }));
   }
 
-  await smtpexpressClient.sendApi.sendMail(emailData);
+  console.log("Sending email with data:", JSON.stringify(emailData, null, 2));
 
-  console.log(`Email sent to ${options.email}`);
+  try {
+    await smtpexpressClient.sendApi.sendMail(emailData);
+  } catch (err: any) {
+    console.error(
+      "SMTPExpress sendMail failed:",
+      err.response?.data || err.message || err
+    );
+    throw new Error("Email sending failed");
+  }
 };
 
 export default sendEmail;

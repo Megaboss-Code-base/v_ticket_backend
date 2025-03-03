@@ -10,9 +10,12 @@ import {
   FLUTTERWAVE_PUBLIC_KEY,
   FLUTTERWAVE_SECRET_KEY,
   FRONTEND_URL,
+  generateRandomAlphaNumeric,
+  generateRandomNumber,
   generateTicketSignature,
   PAYSTACK_BASE_URL,
   PAYSTACK_SECRET_KEY,
+  STRIPE_SECRET_KEY,
   validatePaystackWebhook,
 } from "../config";
 import TransactionInstance from "../models/transactionModel";
@@ -21,7 +24,9 @@ import { UserAttribute, UserInstance } from "../models/userModel";
 import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
 import sendEmail from "../utilities/sendMail";
-import { v2 as cloudinary } from "cloudinary";
+const stripe = require("stripe")(STRIPE_SECRET_KEY);
+import fs from "fs";
+import path from "path";
 
 const Flutterwave = require("flutterwave-node-v3");
 const flw = new Flutterwave(FLUTTERWAVE_PUBLIC_KEY, FLUTTERWAVE_SECRET_KEY);
@@ -563,7 +568,7 @@ export const handlePaymentVerification = async (
 
       await UserInstance.increment(
         { totalEarnings: appOwnerEarnings },
-        { where: { id: ACCOUNT_OWNER_ID } }
+        { where: { id: ACCOUNT_OWNER_ID }, transaction }
       );
 
       const mailSubject = `Your Ticket for "${event.title}"`;
@@ -612,5 +617,731 @@ export const handlePaymentVerification = async (
       error: "Internal server error",
       details: error.message,
     });
+  }
+};
+
+export const stripePayment = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { ticketType, currency, email, phone, fullName, attendees, quantity } =
+    req.body;
+  const { eventId } = req.params;
+
+  if (!email || !phone || !fullName || !quantity || quantity < 1) {
+    return res
+      .status(400)
+      .json({ error: "Provide all required fields and a valid quantity" });
+  }
+
+  if (!attendees && quantity !== 1) {
+    return res.status(400).json({
+      error: "Since no additional attendee, ticket quantity must be 1.",
+    });
+  }
+
+  if (
+    attendees &&
+    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
+  ) {
+    return res.status(400).json({
+      error: "The number of attendees must match the ticket quantity.",
+    });
+  }
+
+  try {
+    const event = await EventInstance.findOne({ where: { id: eventId } });
+
+    if (!event) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    const eventDate = new Date(event.date);
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const eventDateString = eventDate.toISOString().split("T")[0];
+    const todayDateString = today.toISOString().split("T")[0];
+
+    if (eventDateString < todayDateString) {
+      return res
+        .status(400)
+        .json({ error: "Cannot purchase tickets for expired events" });
+    }
+
+    if (!Array.isArray(event.ticketType)) {
+      return res.status(400).json({ error: "Invalid ticket type structure" });
+    }
+
+    const ticketInfo = event.ticketType.find(
+      (ticket) => ticket.name === ticketType
+    );
+
+    if (!ticketInfo) {
+      return res.status(400).json({ error: "Invalid ticket type" });
+    }
+
+    if (Number(ticketInfo.quantity) < quantity) {
+      return res.status(400).json({
+        error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
+      });
+    }
+
+    const ticketPrice = parseFloat(ticketInfo.price);
+    const ticketId = uuidv4();
+    const signature = generateTicketSignature(ticketId);
+    const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCode = await QRCode.toDataURL(qrCodeData);
+
+    if (ticketPrice === 0) {
+      const allAttendees =
+        attendees && attendees.length > 0
+          ? attendees
+          : [{ name: fullName, email }];
+
+      const ticket = await TicketInstance.create({
+        id: ticketId,
+        email,
+        phone,
+        fullName,
+        eventId: event.id,
+        ticketType,
+        price: 0,
+        purchaseDate: new Date(),
+        qrCode,
+        paid: true,
+        currency,
+        attendees: allAttendees,
+        validationStatus: "valid",
+        isScanned: false,
+      });
+
+      ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
+      ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id } }
+      );
+
+      return res.status(200).json({
+        message: "Ticket successfully created for free event",
+        ticketId: ticket.id,
+        redirect: FRONTEND_URL,
+        ticket,
+      });
+    }
+
+    const totalPrice = ticketPrice * quantity;
+
+    const ticket = await TicketInstance.create({
+      id: ticketId,
+      email,
+      phone,
+      fullName,
+      eventId: event.id,
+      ticketType,
+      price: totalPrice,
+      purchaseDate: new Date(),
+      qrCode,
+      paid: false,
+      currency,
+      attendees: attendees || [{ name: fullName, email }],
+      validationStatus: "invalid",
+      isScanned: false,
+    });
+
+    const eventOwner = (await UserInstance.findOne({
+      where: { id: event.userId },
+    })) as unknown as UserAttribute;
+
+    if (!eventOwner) {
+      return res.status(404).json({ error: "Event owner not found" });
+    }
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency,
+              product_data: {
+                name: `${event.title} - ${ticketType} Ticket`,
+                description: `Ticket for ${event.title}`,
+              },
+              unit_amount: Math.round(ticketPrice * 100),
+            },
+            quantity,
+          },
+        ],
+        customer_email: email,
+        metadata: {
+          eventId,
+          ticketId,
+          ticketType,
+          quantity: quantity.toString(),
+          fullName,
+          phone,
+          attendees: JSON.stringify(attendees || []),
+        },
+        mode: "payment",
+        success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.FRONTEND_URL}/failed`,
+      });
+
+      return res.status(200).json({
+        message: "Redirect to Stripe Checkout",
+        checkoutUrl: session.url,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "Failed to create ticket",
+      details: error.message,
+    });
+  }
+};
+
+//   req: Request,
+//   res: Response
+// ): Promise<any> => {
+//   const sessionId = req.query.session_id;
+//   try {
+//     const session = await stripe.checkout.sessions.retrieve(sessionId);
+//     // console.log("session", session);
+//     if (session.payment_status === "paid") {
+//       const paymentReference = session.id;
+//       const totalAmount = session.amount_total/100;
+//       const ticketId = session.metadata.ticketId;
+//       const quantity = session.metadata.quantity;
+//       const email = session.customer_email;
+//       const name = session.metadata.fullName;
+//       const currency = session.currency;
+//       const id = generateRandomNumber(9);
+//     console.log("totalAmount", totalAmount);
+
+//       const existingTransaction = await TransactionInstance.findOne({
+//         where: { paymentReference },
+//       });
+
+//       const transaction = await db.transaction();
+
+//       try {
+//         if (!existingTransaction) {
+//           await TransactionInstance.create(
+//             {
+//               id,
+//               email,
+//               fullName: name,
+//               ticketId,
+//               paymentStatus: "successful",
+//               totalAmount,
+//               paymentReference,
+//               currency,
+//             },
+//             { transaction }
+//           );
+//         }
+
+//         const ticket = await TicketInstance.findOne({
+//           where: { id: ticketId },
+//           transaction,
+//         });
+
+//         if (!ticket) throw new Error("Ticket not found");
+
+//         const event = await EventInstance.findOne({
+//           where: { id: ticket.eventId },
+//           transaction,
+//         });
+
+//         if (!event) throw new Error("Event not found");
+
+//         ticket.validationStatus = "valid";
+//         ticket.paid = true;
+//         ticket.flwRef = paymentReference;
+//         await ticket.save({ transaction });
+
+//         const ticketTypeIndex = event.ticketType.findIndex(
+//           (type) => type.name === ticket.ticketType
+//         );
+
+//         if (ticketTypeIndex >= 0) {
+//           const ticketType = event.ticketType[ticketTypeIndex];
+//           const currentSold = parseInt(ticketType.sold || "0", 10);
+//           const currentQuantity = parseInt(ticketType.quantity || "0", 10);
+
+//           if (currentQuantity < quantity) {
+//             throw new Error("Not enough tickets available");
+//           }
+
+//           event.ticketType[ticketTypeIndex] = {
+//             ...ticketType,
+//             sold: (currentSold + parseInt(quantity, 10)).toString(),
+//             quantity: (currentQuantity - parseInt(quantity, 10)).toString(),
+//           };
+
+//           await EventInstance.update(
+//             { ticketType: event.ticketType },
+//             { where: { id: event.id }, transaction }
+//           );
+//         } else {
+//           throw new Error("Ticket type not found in the event");
+//         }
+
+//         const eventOwner = await UserInstance.findOne({
+//           where: { id: event.userId },
+//           transaction,
+//         });
+
+//         if (eventOwner) {
+//           const earnings = (totalAmount * 0.8847).toFixed(2);
+//           await NotificationInstance.create(
+//             {
+//               id: uuidv4(),
+//               title: `Ticket purchased for your event "${event.title}"`,
+//               message: `A ticket for your event titled "${event.title}" has been purchased. Amount paid: ${currency} ${earnings}. Purchaser: ${ticket.fullName}.`,
+//               userId: event.userId,
+//               isRead: false,
+//             },
+//             { transaction }
+//           );
+//         }
+
+//         const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+
+//         await UserInstance.increment(
+//           { totalEarnings: appOwnerEarnings },
+//           { where: { id: ACCOUNT_OWNER_ID } }
+//         );
+
+//         const mailSubject = `Your Ticket for "${event.title}"`;
+//         const mailMessage = `
+//           Dear ${ticket.fullName},
+
+//           Thank you for purchasing a ticket for the event "${event.title}".
+//           Here are your ticket details:
+
+//           - Event: ${event.title}
+//           - Ticket Type: ${ticket.ticketType}
+//           - Price: ${currency} ${totalAmount.toFixed(2)}
+//           - Date: ${new Date(event.date).toLocaleDateString()}
+
+//           Please find your ticket QR code attached below.
+
+//           Best regards,
+//           The Event Team
+//         `;
+
+//         await sendEmail({
+//           email: ticket.email,
+//           subject: mailSubject,
+//           message: mailMessage,
+//           attachments: [
+//             {
+//               filename: `ticket-qr-code.png`,
+//               content: ticket.qrCode.split(",")[1],
+//               encoding: "base64",
+//             },
+//           ],
+//         });
+
+//         await transaction.commit();
+
+//         return res
+//           .status(200)
+//           .json({ message: "Payment verified and processed" });
+//       } catch (error: any) {
+//         await transaction.rollback();
+//         throw error;
+//       }
+//     } else {
+//       res.status(400).json({ payment_status: "unpaid" });
+//     }
+//   } catch (error) {
+//     console.error("Error fetching session:", error);
+//     res.status(500).json({ error: "Could not confirm payment" });
+//   }
+// };
+
+// cs_test_a1bqDDU3w1SIG4qGpOCjvhoUxN5xPFHjtQ5q6tkkQceiC06FFKrGSczuAp
+export const stripePaymentIntent = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { ticketType, currency, email, phone, fullName, attendees, quantity } =
+    req.body;
+  const { eventId } = req.params;
+
+  if (!email || !phone || !fullName || !quantity || quantity < 1) {
+    return res
+      .status(400)
+      .json({ error: "Provide all required fields and a valid quantity" });
+  }
+
+  if (!attendees && quantity !== 1) {
+    return res.status(400).json({
+      error: "Since no additional attendee, ticket quantity must be 1.",
+    });
+  }
+
+  if (
+    attendees &&
+    (!Array.isArray(attendees) || attendees.length !== quantity - 1)
+  ) {
+    return res.status(400).json({
+      error: "The number of attendees must match the ticket quantity.",
+    });
+  }
+
+  try {
+    const event = await EventInstance.findOne({ where: { id: eventId } });
+
+    if (!event) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    const eventDate = new Date(event.date);
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+    eventDate.setHours(0, 0, 0, 0);
+
+    // const diffInTime = today.getTime() - eventDate.getTime();
+    // const diffInDays = diffInTime / (1000 * 60 * 60 * 24);
+
+    // if (diffInDays >= 1) {
+    //   return res
+    //     .status(400)
+    //     .json({ error: "Cannot purchase tickets for expired events" });
+    // }
+
+    const eventDateString = eventDate.toISOString().split("T")[0];
+    const todayDateString = today.toISOString().split("T")[0];
+
+    if (eventDateString < todayDateString) {
+      return res
+        .status(400)
+        .json({ error: "Cannot purchase tickets for expired events" });
+    }
+
+    if (!Array.isArray(event.ticketType)) {
+      return res.status(400).json({ error: "Invalid ticket type structure" });
+    }
+
+    const ticketInfo = event.ticketType.find(
+      (ticket) => ticket.name === ticketType
+    );
+
+    if (!ticketInfo) {
+      return res.status(400).json({ error: "Invalid ticket type" });
+    }
+
+    if (Number(ticketInfo.quantity) < quantity) {
+      return res.status(400).json({
+        error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
+      });
+    }
+
+    const ticketPrice = parseFloat(ticketInfo.price);
+    const ticketId = uuidv4();
+    const signature = generateTicketSignature(ticketId);
+    const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const qrCode = await QRCode.toDataURL(qrCodeData);
+
+    if (ticketPrice === 0) {
+      const allAttendees =
+        attendees && attendees.length > 0
+          ? attendees
+          : [{ name: fullName, email }];
+
+      const ticket = await TicketInstance.create({
+        id: ticketId,
+        email,
+        phone,
+        fullName,
+        eventId: event.id,
+        ticketType,
+        price: 0,
+        purchaseDate: new Date(),
+        qrCode,
+        paid: true,
+        currency,
+        attendees: allAttendees,
+        validationStatus: "valid",
+        isScanned: false,
+      });
+
+      ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
+      ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id } }
+      );
+
+      return res.status(200).json({
+        message: "Ticket successfully created for free event",
+        ticketId: ticket.id,
+        redirect: FRONTEND_URL,
+        ticket,
+      });
+    }
+
+    const totalPrice = ticketPrice * quantity;
+
+    const ticket = await TicketInstance.create({
+      id: ticketId,
+      email,
+      phone,
+      fullName,
+      eventId: event.id,
+      ticketType,
+      price: totalPrice,
+      purchaseDate: new Date(),
+      qrCode,
+      paid: false,
+      currency,
+      attendees: attendees || [{ name: fullName, email }],
+      validationStatus: "invalid",
+      isScanned: false,
+    });
+
+    const eventOwner = (await UserInstance.findOne({
+      where: { id: event.userId },
+    })) as unknown as UserAttribute;
+
+    if (!eventOwner) {
+      return res.status(404).json({ error: "Event owner not found" });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: totalPrice * 100,
+      currency,
+      receipt_email: email,
+      metadata: { eventId, ticketType, quantity },
+    });
+
+    res.status(201).json({
+      message: "Payment initiated",
+      data: paymentIntent.client_secret,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: "Failed to create ticket",
+      details: error.message,
+    });
+  }
+};
+
+export const confirmStripePayment = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const sessionId = req.query.session_id;
+
+  if (!sessionId || typeof sessionId !== "string") {
+    return res.status(400).json({ error: "Invalid session ID" });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (
+      !session.payment_status ||
+      !session.id ||
+      !session.amount_total ||
+      !session.metadata
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Missing required fields in Stripe session" });
+    }
+
+    if (session.payment_status !== "paid") {
+      return res.status(400).json({ payment_status: "unpaid" });
+    }
+
+    const paymentReference = session.id;
+    const totalAmount = session.amount_total / 100;
+    const ticketId = session.metadata.ticketId;
+    const quantity = parseInt(session.metadata.quantity, 10);
+    const email = session.customer_email;
+    const name = session.metadata.fullName;
+    const currency = session.currency;
+
+    if (!ticketId || isNaN(quantity) || quantity <= 0 || !name || !email) {
+      return res.status(400).json({ error: "Invalid metadata fields" });
+    }
+
+    const id = generateRandomNumber(111111111, 100000000000);
+    const transaction = await db.transaction();
+
+    try {
+      const existingTransaction = await TransactionInstance.findOne({
+        where: { paymentReference, paymentStatus: "successful" },
+      });
+
+      if (existingTransaction) {
+        return res.status(400).json({
+          error: "Payment already verified and cannot be processed again.",
+        });
+      }
+
+      await TransactionInstance.create(
+        {
+          id,
+          email,
+          fullName: name,
+          ticketId,
+          paymentStatus: "successful",
+          totalAmount,
+          paymentReference,
+          currency,
+        },
+        { transaction }
+      );
+
+      const ticket = await TicketInstance.findOne({
+        where: { id: ticketId },
+        transaction,
+      });
+
+      if (!ticket) {
+        throw new Error("Ticket not found");
+      }
+
+      const event = await EventInstance.findOne({
+        where: { id: ticket.eventId },
+        transaction,
+      });
+
+      if (!event) {
+        throw new Error("Event not found");
+      }
+
+      ticket.validationStatus = "valid";
+      ticket.paid = true;
+      ticket.flwRef = paymentReference;
+      await ticket.save({ transaction });
+
+      const ticketTypeIndex = event.ticketType.findIndex(
+        (type) => type.name === ticket.ticketType
+      );
+
+      if (ticketTypeIndex < 0) {
+        throw new Error("Ticket type not found in the event");
+      }
+
+      const ticketType = event.ticketType[ticketTypeIndex];
+      const currentSold = parseInt(ticketType.sold || "0", 10);
+      const currentQuantity = parseInt(ticketType.quantity || "0", 10);
+
+      if (currentQuantity < quantity) {
+        throw new Error("Not enough tickets available");
+      }
+
+      event.ticketType[ticketTypeIndex] = {
+        ...ticketType,
+        sold: (currentSold + quantity).toString(),
+        quantity: (currentQuantity - quantity).toString(),
+      };
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id }, transaction }
+      );
+
+      const eventOwner = await UserInstance.findOne({
+        where: { id: event.userId },
+        transaction,
+      });
+
+      if (eventOwner) {
+        const earnings = (totalAmount * 0.8847).toFixed(2);
+        await NotificationInstance.create(
+          {
+            id: uuidv4(),
+            title: `Ticket purchased for your event "${event.title}"`,
+            message: `A ticket for your event titled "${event.title}" has been purchased. Amount paid: ${currency} ${earnings}. Purchaser: ${name}.`,
+            userId: event.userId,
+            isRead: false,
+          },
+          { transaction }
+        );
+      }
+
+      const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+      await UserInstance.increment(
+        { totalEarnings: appOwnerEarnings },
+        { where: { id: ACCOUNT_OWNER_ID }, transaction }
+      );
+
+      const qrCodeBase64 = ticket.qrCode.split(",")[1];
+      const qrCodeBuffer = Buffer.from(qrCodeBase64, "base64");
+      const qrCodeFilename = `ticket-${ticket.id}-qrcode.png`;
+
+      const qrCodePath = path.join(__dirname, "..", "temp", qrCodeFilename);
+      fs.writeFileSync(qrCodePath, qrCodeBuffer);
+
+      const mailSubject = `Your Ticket for "${event.title}"`;
+      const mailMessage = `
+        Dear ${name},
+        
+        Thank you for purchasing a ticket for the event "${event.title}".
+        Here are your ticket details:
+        
+        - Event: ${event.title}
+        - Ticket Type: ${ticket.ticketType}
+        - Price: ${currency} ${totalAmount.toFixed(2)}
+        - Date: ${new Date(event.date).toLocaleDateString()}
+        
+        Please find your ticket QR code attached below.
+        
+        Best regards,
+        The Event Team
+      `;
+
+      try {
+        await sendEmail({
+          email,
+          subject: mailSubject,
+          message: mailMessage,
+          attachments: [
+            {
+              filename: `ticket-${ticket.id}-qrcode.png`,
+              content: qrCodeBase64,
+              encoding: "base64",
+              contentType: "image/png",
+            },
+          ],
+        });
+      } catch (error:any) {
+        await transaction.rollback();
+        console.error("Email sending failed:", error.message);
+        return res.status(500).json({ error: "Failed to send email" });
+      }
+
+      fs.unlinkSync(qrCodePath);
+
+      await transaction.commit();
+      return res
+        .status(200)
+        .json({ message: "Payment verified and processed" });
+    } catch (error: any) {
+      await transaction.rollback();
+      console.error("Transaction error:", error.message);
+      return res.status(500).json({ error: "Transaction failed" });
+    }
+  } catch (error) {
+    console.error("Error fetching session:", error);
+    return res.status(500).json({ error: "Could not confirm payment" });
   }
 };

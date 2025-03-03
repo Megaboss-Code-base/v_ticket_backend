@@ -46,6 +46,8 @@ export const PAYSTACK_PUBLIC_KEY = process.env.PAYSTACK_PUBLIC_KEY!;
 export const PAYSTACK_BASE_URL = process.env.PAYSTACK_BASE_URL!;
 export const SMTPEXPRESS_PROJECT_ID = process.env.SMTPEXPRESS_PROJECT_ID! as string;
 export const SMTPEXPRESS_PROJECT_SECRET = process.env.SMTPEXPRESS_PROJECT_SECRET! as string;
+export const STRIPE_PUBLIC_KEY = process.env.STRIPE_PUBLIC_KEY! as string;
+export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY! as string;
 // export const validatePaystackWebhook = process.env.validatePaystackWebhook!;
 export function generateRandomAlphaNumeric(length: any) {
   let result = "";
@@ -56,6 +58,14 @@ export function generateRandomAlphaNumeric(length: any) {
     result += characters.charAt(Math.floor(Math.random() * charactersLength));
   }
   return result;
+}
+
+export function generateRandomNumber(min = 8, max = 100000000000) {
+  if (max === Infinity) {
+      max = 100000000000;
+  }
+
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 export function generateTicketSignature(ticketId: string): string {

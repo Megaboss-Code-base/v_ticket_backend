@@ -44,7 +44,7 @@ const getCustomFieldValue = (
   const field = customFields.find(
     (field) => field.variable_name === variableName
   );
-  return field ? field.value : undefined;
+  return field ? field.value : "";
 };
 
 export const purchaseTicket = async (

@@ -1,6 +1,5 @@
 import { createClient } from "smtpexpress";
 import {
-  generateRandomAlphaNumeric,
   SMTPEXPRESS_PROJECT_ID,
   SMTPEXPRESS_PROJECT_SECRET,
 } from "../config";
@@ -11,12 +10,6 @@ interface EmailOptions {
   subject: string;
   message: string;
   isHtml?: boolean;
-  // attachments?: {
-  //   filename?: string;
-  //   content?: string | Buffer;
-  //   contentType?: string;
-  //   encoding?: string;
-  // }[];
 }
 
 const smtpexpressClient = createClient({
@@ -25,10 +18,6 @@ const smtpexpressClient = createClient({
 });
 
 const sendEmail = async (options: EmailOptions): Promise<void> => {
-  const buffer = Buffer.from(generateRandomAlphaNumeric(15));
-  // const attachment = new Blob([buffer], { type: "image/png" });
-  const attachment = new Blob([buffer], { type: "application/pdf" });
-
   const emailData: any = {
     recipients: { email: options.email, name: options.name || "User" },
     sender: {
@@ -38,7 +27,6 @@ const sendEmail = async (options: EmailOptions): Promise<void> => {
     subject: options.subject,
     message: options.isHtml ? undefined : options.message,
     htmlMessage: options.isHtml ? options.message : undefined,
-    // attachments: options.attachments || [], 
   };
 
   try {

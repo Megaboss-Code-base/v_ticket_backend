@@ -25,8 +25,12 @@ import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
 import sendEmail from "../utilities/sendMail";
 const stripe = require("stripe")(STRIPE_SECRET_KEY);
-import fs from "fs";
-import path from "path";
+import { v2 as cloudinary } from "cloudinary";
+import { CLOUDINARY_URL } from "../config";
+
+cloudinary.config({
+  cloudinary_url: CLOUDINARY_URL,
+});
 
 const Flutterwave = require("flutterwave-node-v3");
 const flw = new Flutterwave(FLUTTERWAVE_PUBLIC_KEY, FLUTTERWAVE_SECRET_KEY);
@@ -51,10 +55,10 @@ export const purchaseTicket = async (
   const { ticketType, currency, email, phone, fullName, attendees, quantity } =
     req.body;
 
-  if (!email || !phone || !fullName || !quantity || quantity < 1) {
-    return res
-      .status(400)
-      .json({ error: "Provide all required fields and a valid quantity" });
+  if (!email || !phone || !currency || !fullName || !quantity || quantity < 1) {
+    return res.status(400).json({
+      error: "Provide all required fields and a valid quantity",
+    });
   }
 
   if (!attendees && quantity !== 1) {
@@ -79,30 +83,21 @@ export const purchaseTicket = async (
       return res.status(404).json({ error: "Event not found" });
     }
 
-    // if (new Date() > new Date(event.date)) {
-    //   return res
-    //     .status(400)
-    //     .json({ error: "Cannot purchase tickets for expired events" });
-    // }
-
     const eventDate = new Date(event.date);
     const today = new Date();
 
     today.setHours(0, 0, 0, 0);
     eventDate.setHours(0, 0, 0, 0);
 
-    const diffInTime = today.getTime() - eventDate.getTime();
-    const diffInDays = diffInTime / (1000 * 60 * 60 * 24);
+    const eventDateString = eventDate.toISOString().split("T")[0];
+    const todayDateString = today.toISOString().split("T")[0];
 
-    if (diffInDays >= 1) {
-      return res
-        .status(400)
-        .json({ error: "Cannot purchase tickets for expired events" });
+    if (eventDateString < todayDateString) {
+      return res.status(400).json({
+        error: "Cannot purchase tickets for expired events",
+      });
     }
 
-    //
-    // end
-    //
     if (!Array.isArray(event.ticketType)) {
       return res.status(400).json({ error: "Invalid ticket type structure" });
     }
@@ -125,7 +120,23 @@ export const purchaseTicket = async (
     const ticketId = uuidv4();
     const signature = generateTicketSignature(ticketId);
     const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
-    const qrCode = await QRCode.toDataURL(qrCodeData);
+
+    const qrCodeBuffer = await QRCode.toBuffer(qrCodeData);
+
+    const cloudinaryResult = await new Promise<string>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder: "qrcodes", resource_type: "image" },
+        (error, result) => {
+          if (error) {
+            console.error("Cloudinary upload error:", error);
+            return reject(error);
+          }
+          resolve(result?.url || "");
+        }
+      );
+
+      uploadStream.end(qrCodeBuffer);
+    });
 
     if (ticketPrice === 0) {
       const ticket = await TicketInstance.create({
@@ -137,7 +148,7 @@ export const purchaseTicket = async (
         ticketType,
         price: 0,
         purchaseDate: new Date(),
-        qrCode,
+        qrCode: cloudinaryResult,
         paid: true,
         currency,
         attendees: attendees || [{ name: fullName, email }],
@@ -161,6 +172,7 @@ export const purchaseTicket = async (
       });
     }
 
+    // For paid tickets
     const totalPrice = ticketPrice * quantity;
 
     const ticket = await TicketInstance.create({
@@ -172,7 +184,7 @@ export const purchaseTicket = async (
       ticketType,
       price: totalPrice,
       purchaseDate: new Date(),
-      qrCode,
+      qrCode: cloudinaryResult,
       paid: false,
       currency,
       attendees: attendees || [{ name: fullName, email }],
@@ -252,7 +264,6 @@ export const purchaseTicket = async (
           {
             email,
             amount: totalPrice * 100, // Paystack expects amount in kobo/cents
-            // reference: tx_ref,
             callback_url: `${FRONTEND_URL}/success?ticketId=${ticketId}`,
             metadata: {
               custom_fields: [
@@ -273,10 +284,6 @@ export const purchaseTicket = async (
                 },
               ],
             },
-            // subaccount: "ACCT_uxkyd30ocwtj6zk", // Optional: Use if you have a subaccount
-            // bearer: "subaccount", // Specifies that the subaccount bears the fee
-            // split_code: process.env.PAYSTACK_TRANSACTION_SPLIT_CODE,
-            // invoice_limit: 1,
           },
           {
             headers: {
@@ -299,7 +306,6 @@ export const purchaseTicket = async (
           throw new Error("Error creating Paystack payment link");
         }
       } catch (paystackError: any) {
-        // console.error("Paystack error:", paystackError.message);
         console.log(`Paystack error:`, paystackError.message);
         return res.status(500).json({
           error:
@@ -323,6 +329,7 @@ export const handleUnifiedWebhook = async (
     // Validate Flutterwave webhook
     const flutterwaveSignature =
       req.headers["verif-hash"] || req.headers["Verif-Hash"];
+
     if (
       flutterwaveSignature &&
       flutterwaveSignature === FLUTTERWAVE_HASH_SECRET
@@ -478,8 +485,18 @@ export const handlePaymentVerification = async (
     const id = paymentDetails.id;
 
     const existingTransaction = await TransactionInstance.findOne({
-      where: { paymentReference },
+      where: { paymentReference, paymentStatus: "successful" },
     });
+
+    const existingTicket = await TicketInstance.findOne({
+      where: { id: ticketId, paid: true, validationStatus: "valid" },
+    });
+
+    if (existingTransaction && existingTicket) {
+      return res.status(400).json({
+        error: "Payment already verified and cannot be processed again.",
+      });
+    }
 
     const transaction = await db.transaction();
     try {
@@ -573,34 +590,44 @@ export const handlePaymentVerification = async (
 
       const mailSubject = `Your Ticket for "${event.title}"`;
       const mailMessage = `
-        Dear ${ticket.fullName},
+        <p>Dear ${name},</p>
+        
+        <p>Thank you for purchasing a ticket for the event "${event.title}".</p>
+        <p>Here are your ticket details:</p>
+        
+        <ul>
+          <li><strong>Event:</strong> ${event.title}</li>
+          <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+          <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+          <li><strong>Quantity:</strong> ${quantity}</li>
+          <li><strong>Date:</strong> ${new Date(
+            event.date
+          ).toLocaleDateString()}</li>
+        </ul>
+                        
+        <p>Please find your ticket QR code below. You can also download it using the link provided:</p>
 
-        Thank you for purchasing a ticket for the event "${event.title}".
-        Here are your ticket details:
+          <img src="${
+            ticket.qrCode
+          }" alt="Ticket QR Code" style="max-width: 200px;">
 
-        - Event: ${event.title}
-        - Ticket Type: ${ticket.ticketType}
-        - Price: ${currency} ${totalAmount.toFixed(2)}
-        - Date: ${new Date(event.date).toLocaleDateString()}
-
-        Please find your ticket QR code attached below.
-
-        Best regards,
-        The Event Team
+          <p><a href="${
+            ticket.qrCode
+          }" download="ticket_qrcode.png">Download QR Code</a></p>
+          <p>Best regards,<br>The Event Team</p>
       `;
 
-      await sendEmail({
-        email: ticket.email,
-        subject: mailSubject,
-        message: mailMessage,
-        attachments: [
-          {
-            filename: `ticket-qr-code.png`,
-            content: ticket.qrCode.split(",")[1],
-            encoding: "base64",
-          },
-        ],
-      });
+      try {
+        await sendEmail({
+          email,
+          subject: mailSubject,
+          message: mailMessage,
+        });
+      } catch (error: any) {
+        await transaction.rollback();
+        console.error("Email sending failed:", error.message);
+        return res.status(500).json({ error: "Failed to send email" });
+      }
 
       await transaction.commit();
 
@@ -788,8 +815,8 @@ export const stripePayment = async (
           attendees: JSON.stringify(attendees || []),
         },
         mode: "payment",
-        success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.FRONTEND_URL}/failed`,
+        success_url: `${FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${FRONTEND_URL}/failed`,
       });
 
       return res.status(200).json({
@@ -809,169 +836,6 @@ export const stripePayment = async (
   }
 };
 
-//   req: Request,
-//   res: Response
-// ): Promise<any> => {
-//   const sessionId = req.query.session_id;
-//   try {
-//     const session = await stripe.checkout.sessions.retrieve(sessionId);
-//     // console.log("session", session);
-//     if (session.payment_status === "paid") {
-//       const paymentReference = session.id;
-//       const totalAmount = session.amount_total/100;
-//       const ticketId = session.metadata.ticketId;
-//       const quantity = session.metadata.quantity;
-//       const email = session.customer_email;
-//       const name = session.metadata.fullName;
-//       const currency = session.currency;
-//       const id = generateRandomNumber(9);
-//     console.log("totalAmount", totalAmount);
-
-//       const existingTransaction = await TransactionInstance.findOne({
-//         where: { paymentReference },
-//       });
-
-//       const transaction = await db.transaction();
-
-//       try {
-//         if (!existingTransaction) {
-//           await TransactionInstance.create(
-//             {
-//               id,
-//               email,
-//               fullName: name,
-//               ticketId,
-//               paymentStatus: "successful",
-//               totalAmount,
-//               paymentReference,
-//               currency,
-//             },
-//             { transaction }
-//           );
-//         }
-
-//         const ticket = await TicketInstance.findOne({
-//           where: { id: ticketId },
-//           transaction,
-//         });
-
-//         if (!ticket) throw new Error("Ticket not found");
-
-//         const event = await EventInstance.findOne({
-//           where: { id: ticket.eventId },
-//           transaction,
-//         });
-
-//         if (!event) throw new Error("Event not found");
-
-//         ticket.validationStatus = "valid";
-//         ticket.paid = true;
-//         ticket.flwRef = paymentReference;
-//         await ticket.save({ transaction });
-
-//         const ticketTypeIndex = event.ticketType.findIndex(
-//           (type) => type.name === ticket.ticketType
-//         );
-
-//         if (ticketTypeIndex >= 0) {
-//           const ticketType = event.ticketType[ticketTypeIndex];
-//           const currentSold = parseInt(ticketType.sold || "0", 10);
-//           const currentQuantity = parseInt(ticketType.quantity || "0", 10);
-
-//           if (currentQuantity < quantity) {
-//             throw new Error("Not enough tickets available");
-//           }
-
-//           event.ticketType[ticketTypeIndex] = {
-//             ...ticketType,
-//             sold: (currentSold + parseInt(quantity, 10)).toString(),
-//             quantity: (currentQuantity - parseInt(quantity, 10)).toString(),
-//           };
-
-//           await EventInstance.update(
-//             { ticketType: event.ticketType },
-//             { where: { id: event.id }, transaction }
-//           );
-//         } else {
-//           throw new Error("Ticket type not found in the event");
-//         }
-
-//         const eventOwner = await UserInstance.findOne({
-//           where: { id: event.userId },
-//           transaction,
-//         });
-
-//         if (eventOwner) {
-//           const earnings = (totalAmount * 0.8847).toFixed(2);
-//           await NotificationInstance.create(
-//             {
-//               id: uuidv4(),
-//               title: `Ticket purchased for your event "${event.title}"`,
-//               message: `A ticket for your event titled "${event.title}" has been purchased. Amount paid: ${currency} ${earnings}. Purchaser: ${ticket.fullName}.`,
-//               userId: event.userId,
-//               isRead: false,
-//             },
-//             { transaction }
-//           );
-//         }
-
-//         const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
-
-//         await UserInstance.increment(
-//           { totalEarnings: appOwnerEarnings },
-//           { where: { id: ACCOUNT_OWNER_ID } }
-//         );
-
-//         const mailSubject = `Your Ticket for "${event.title}"`;
-//         const mailMessage = `
-//           Dear ${ticket.fullName},
-
-//           Thank you for purchasing a ticket for the event "${event.title}".
-//           Here are your ticket details:
-
-//           - Event: ${event.title}
-//           - Ticket Type: ${ticket.ticketType}
-//           - Price: ${currency} ${totalAmount.toFixed(2)}
-//           - Date: ${new Date(event.date).toLocaleDateString()}
-
-//           Please find your ticket QR code attached below.
-
-//           Best regards,
-//           The Event Team
-//         `;
-
-//         await sendEmail({
-//           email: ticket.email,
-//           subject: mailSubject,
-//           message: mailMessage,
-//           attachments: [
-//             {
-//               filename: `ticket-qr-code.png`,
-//               content: ticket.qrCode.split(",")[1],
-//               encoding: "base64",
-//             },
-//           ],
-//         });
-
-//         await transaction.commit();
-
-//         return res
-//           .status(200)
-//           .json({ message: "Payment verified and processed" });
-//       } catch (error: any) {
-//         await transaction.rollback();
-//         throw error;
-//       }
-//     } else {
-//       res.status(400).json({ payment_status: "unpaid" });
-//     }
-//   } catch (error) {
-//     console.error("Error fetching session:", error);
-//     res.status(500).json({ error: "Could not confirm payment" });
-//   }
-// };
-
-// cs_test_a1bqDDU3w1SIG4qGpOCjvhoUxN5xPFHjtQ5q6tkkQceiC06FFKrGSczuAp
 export const stripePaymentIntent = async (
   req: Request,
   res: Response
@@ -1013,15 +877,6 @@ export const stripePaymentIntent = async (
 
     today.setHours(0, 0, 0, 0);
     eventDate.setHours(0, 0, 0, 0);
-
-    // const diffInTime = today.getTime() - eventDate.getTime();
-    // const diffInDays = diffInTime / (1000 * 60 * 60 * 24);
-
-    // if (diffInDays >= 1) {
-    //   return res
-    //     .status(400)
-    //     .json({ error: "Cannot purchase tickets for expired events" });
-    // }
 
     const eventDateString = eventDate.toISOString().split("T")[0];
     const todayDateString = today.toISOString().split("T")[0];
@@ -1284,52 +1139,99 @@ export const confirmStripePayment = async (
         { where: { id: ACCOUNT_OWNER_ID }, transaction }
       );
 
-      const qrCodeBase64 = ticket.qrCode.split(",")[1];
-      const qrCodeBuffer = Buffer.from(qrCodeBase64, "base64");
+      // const qrCodeBase64 = ticket.qrCode.split(",")[1];
+      // const qrCodeBuffer = Buffer.from(qrCodeBase64, "base64");
+      // const qrCodeFilename = `ticket-${ticket.id}-qrcode.png`;
+
+      // const qrCodePath = path.join(__dirname, "..", "temp", qrCodeFilename);
+      // fs.writeFileSync(qrCodePath, qrCodeBuffer);
+
+      // const mailSubject = `Your Ticket for "${event.title}"`;
+      // const mailMessage = `
+      //   Dear ${name},
+
+      //   Thank you for purchasing a ticket for the event "${event.title}".
+      //   Here are your ticket details:
+
+      //   - Event: ${event.title}
+      //   - Ticket Type: ${ticket.ticketType}
+      //   - Price: ${currency} ${totalAmount.toFixed(2)}
+      //   - Date: ${new Date(event.date).toLocaleDateString()}
+
+      //   Please find your ticket QR code attached below.
+
+      //   Best regards,
+      //   The Event Team
+      // `;
+
+      // try {
+      //   await sendEmail({
+      //     email,
+      //     subject: mailSubject,
+      //     message: mailMessage,
+      //     attachments: [
+      //       {
+      //         filename: `ticket-${ticket.id}-qrcode.png`,
+      //         content: "",
+      //         contentType: "image/png",
+      //         encoding: "base64",
+      //       },
+      //     ],
+      //   });
+      // } catch (error:any) {
+      //   await transaction.rollback();
+      //   console.error("Email sending failed:", error.message);
+      //   return res.status(500).json({ error: "Failed to send email" });
+      // }
+
+      // fs.unlinkSync(qrCodePath);
+
+      const qrCodeBase64 = ticket.qrCode.split(",")[1]; // Assuming ticket.qrCode is a data URI
+      const qrCodeBuffer = Buffer.from(qrCodeBase64, "base64"); // Convert base64 to Buffer
       const qrCodeFilename = `ticket-${ticket.id}-qrcode.png`;
 
-      const qrCodePath = path.join(__dirname, "..", "temp", qrCodeFilename);
-      fs.writeFileSync(qrCodePath, qrCodeBuffer);
-
+      // Define the email subject and HTML message
       const mailSubject = `Your Ticket for "${event.title}"`;
+
       const mailMessage = `
-        Dear ${name},
-        
-        Thank you for purchasing a ticket for the event "${event.title}".
-        Here are your ticket details:
-        
-        - Event: ${event.title}
-        - Ticket Type: ${ticket.ticketType}
-        - Price: ${currency} ${totalAmount.toFixed(2)}
-        - Date: ${new Date(event.date).toLocaleDateString()}
-        
-        Please find your ticket QR code attached below.
-        
-        Best regards,
-        The Event Team
-      `;
+  <p>Dear ${name},</p>
+  
+  <p>Thank you for purchasing a ticket for the event "${event.title}".</p>
+  <p>Here are your ticket details:</p>
+  
+  <ul>
+    <li><strong>Event:</strong> ${event.title}</li>
+    <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+    <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+    <li><strong>Date:</strong> ${new Date(event.date).toLocaleDateString()}</li>
+  </ul>
+  
+  <p>Please find your ticket QR code attached below.</p>
+  
+  <p>Best regards,<br>The Event Team</p>
+`;
 
       try {
+        // Call the sendEmail function with the HTML message
         await sendEmail({
           email,
           subject: mailSubject,
-          message: mailMessage,
-          attachments: [
-            {
-              filename: `ticket-${ticket.id}-qrcode.png`,
-              content: qrCodeBase64,
-              encoding: "base64",
-              contentType: "image/png",
-            },
-          ],
+          message: mailMessage, // Pass the HTML message
+          isHtml: true, // Indicate that the message is in HTML format
+          // attachments: [
+          //   {
+          //     filename: qrCodeFilename,
+          //     content: qrCodeBuffer,
+          //     contentType: "image/png",
+          //     encoding: "base64",
+          //   },
+          // ],
         });
-      } catch (error:any) {
-        await transaction.rollback();
+      } catch (error: any) {
+        await transaction.rollback(); // Rollback the database transaction if email fails
         console.error("Email sending failed:", error.message);
         return res.status(500).json({ error: "Failed to send email" });
       }
-
-      fs.unlinkSync(qrCodePath);
 
       await transaction.commit();
       return res

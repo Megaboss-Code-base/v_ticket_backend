@@ -1,17 +1,22 @@
 import { createClient } from "smtpexpress";
-import { SMTPEXPRESS_PROJECT_ID, SMTPEXPRESS_PROJECT_SECRET } from "../config";
+import {
+  generateRandomAlphaNumeric,
+  SMTPEXPRESS_PROJECT_ID,
+  SMTPEXPRESS_PROJECT_SECRET,
+} from "../config";
 
 interface EmailOptions {
   email: string;
+  name?: string;
   subject: string;
   message: string;
   isHtml?: boolean;
-  attachments?: {
-    filename?: string;
-    content?: string;
-    contentType?: string;
-    encoding?: string;
-  }[];
+  // attachments?: {
+  //   filename?: string;
+  //   content?: string | Buffer;
+  //   contentType?: string;
+  //   encoding?: string;
+  // }[];
 }
 
 const smtpexpressClient = createClient({
@@ -20,32 +25,21 @@ const smtpexpressClient = createClient({
 });
 
 const sendEmail = async (options: EmailOptions): Promise<void> => {
-  console.log("Using SMTPExpress Credentials:", {
-    projectId: SMTPEXPRESS_PROJECT_ID,
-    projectSecret: SMTPEXPRESS_PROJECT_SECRET,
-  });
+  const buffer = Buffer.from(generateRandomAlphaNumeric(15));
+  // const attachment = new Blob([buffer], { type: "image/png" });
+  const attachment = new Blob([buffer], { type: "application/pdf" });
 
   const emailData: any = {
-    subject: options.subject,
-    message: options.isHtml ? undefined : options.message,
-    htmlMessage: options.isHtml ? options.message : undefined,
+    recipients: { email: options.email, name: options.name || "User" },
     sender: {
       name: process.env.FROM_NAME,
       email: process.env.FROM_EMAIL,
     },
-    recipients: options.email,
+    subject: options.subject,
+    message: options.isHtml ? undefined : options.message,
+    htmlMessage: options.isHtml ? options.message : undefined,
+    // attachments: options.attachments || [], 
   };
-
-  if (options.attachments) {
-    emailData.attachments = options.attachments.map((a) => ({
-      filename: a.filename,
-      content: a.content,
-      contentType: a.contentType,
-      encoding: a.encoding,
-    }));
-  }
-
-  console.log("Sending email with data:", JSON.stringify(emailData, null, 2));
 
   try {
     await smtpexpressClient.sendApi.sendMail(emailData);

@@ -23,6 +23,7 @@ import { NotificationInstance } from "../models/notificationModel";
 import sendEmail from "../utilities/sendMail";
 import { v2 as cloudinary } from "cloudinary";
 import { CLOUDINARY_URL } from "../config";
+import { uploadICSFileToCloudinary } from "../utilities/multer";
 
 cloudinary.config({
   cloudinary_url: CLOUDINARY_URL,
@@ -42,6 +43,40 @@ const getCustomFieldValue = (
   );
   return field ? field.value : "";
 };
+
+function generateGoogleCalendarLink(event: any) {
+  const startDate = new Date(event.date).toISOString().replace(/[-:.]/g, "");
+  const endDate = startDate; // Assuming it's a one-day event
+
+  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+    event.title
+  )}&dates=${startDate}/${endDate}&details=${encodeURIComponent(
+    event.description || ""
+  )}&location=${encodeURIComponent(event.location || "")}&sf=true&output=xml`;
+}
+
+// Helper to generate .ics content
+function generateICS(event: any): string {
+  const formatDateForICS = (date: Date) =>
+    date
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}Z$/, "");
+
+  const startDate = formatDateForICS(new Date(event.date));
+  const endDate = formatDateForICS(new Date(event.date)); // Update if multi-day
+
+  return `BEGIN:VCALENDAR
+          VERSION:2.0
+          BEGIN:VEVENT
+          SUMMARY:${event.title}
+          DESCRIPTION:${event.description || ""}
+          DTSTART:${startDate}
+          DTEND:${endDate}
+          LOCATION:${event.location || ""}
+          END:VEVENT
+          END:VCALENDAR`;
+}
 
 export const purchaseTicket = async (
   req: Request,
@@ -412,7 +447,7 @@ export const handleUnifiedWebhook = async (
   }
 };
 
-export const handlePaymentVerification = async (
+export const handlePaymentVerification1 = async (
   req: Request,
   res: Response
 ): Promise<any> => {
@@ -584,34 +619,122 @@ export const handlePaymentVerification = async (
         { where: { id: ACCOUNT_OWNER_ID }, transaction }
       );
 
+      // start
+      // // Compute event start and end times for calendar links
+      // const eventDate = new Date(event.date);
+      // const startDateTime = new Date(eventDate);
+      // startDateTime.setHours(10, 0, 0); // Default start time: 10:00 AM
+      // const endDateTime = new Date(startDateTime);
+      // endDateTime.setHours(11, 0, 0); // 1-hour duration
+
+      // // Helper function to format dates for Google Calendar
+      // function formatDateForGoogle(date:any) {
+      //   const year = date.getUTCFullYear();
+      //   const month = ("0" + (date.getUTCMonth() + 1)).slice(-2);
+      //   const day = ("0" + date.getUTCDate()).slice(-2);
+      //   const hour = ("0" + date.getUTCHours()).slice(-2);
+      //   const minute = ("0" + date.getUTCMinutes()).slice(-2);
+      //   const second = ("0" + date.getUTCSeconds()).slice(-2);
+      //   return `${year}${month}${day}T${hour}${minute}${second}Z`;
+      // }
+
+      // const startFormatted = formatDateForGoogle(startDateTime);
+      // const endFormatted = formatDateForGoogle(endDateTime);
+
+      // // Format for Outlook's ISO string
+      // const startISOString = startDateTime.toISOString();
+      // const endISOString = endDateTime.toISOString();
+
+      function generateGoogleCalendarLink(event: any): string {
+        const formatDateForGoogleCalendar = (date: Date) => {
+          return date
+            .toISOString()
+            .replace(/[-:]/g, "")
+            .replace(/\.\d{3}Z$/, "Z");
+        };
+
+        const startDate = formatDateForGoogleCalendar(new Date(event.date));
+        const endDate = formatDateForGoogleCalendar(new Date(event.date)); // same if it's a one-day event
+
+        return `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+          event.title
+        )}&dates=${startDate}/${endDate}&details=${encodeURIComponent(
+          event.description || ""
+        )}&location=${encodeURIComponent(
+          event.location || ""
+        )}&sf=true&output=xml`;
+      }
+
+      // ends
+
       const mailSubject = `Your Ticket for "${event.title}"`;
+
+      const calendarLink = generateGoogleCalendarLink(event);
+
       const mailMessage = `
-        <p>Dear ${name},</p>
-        
-        <p>Thank you for purchasing a ticket for the event "${event.title}".</p>
-        <p>Here are your ticket details:</p>
-        
-        <ul>
-          <li><strong>Event:</strong> ${event.title}</li>
-          <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
-          <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
-          <li><strong>Quantity:</strong> ${quantity}</li>
-          <li><strong>Date:</strong> ${new Date(
-            event.date
-          ).toLocaleDateString()}</li>
-        </ul>
-                        
-        <p>Please find your ticket QR code below. You can also download it using the link provided:</p>
+              <p>Dear ${name},</p>
 
-          <img src="${
-            ticket.qrCode
-          }" alt="Ticket QR Code" style="max-width: 200px;">
+              <p>Thank you for purchasing a ticket for the event "<strong>${
+                event.title
+              }</strong>".</p>
 
-          <p><a href="${
-            ticket.qrCode
-          }" download="ticket_qrcode.png">Download QR Code</a></p>
-          <p>Best regards,<br>The Event Team</p>
-      `;
+              <p>Here are your ticket details:</p>
+
+              <ul>
+                <li><strong>Event:</strong> ${event.title}</li>
+                <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+                <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(
+        2
+      )}</li>
+                <li><strong>Quantity:</strong> ${quantity}</li>
+                <li><strong>Date:</strong> ${new Date(
+                  event.date
+                ).toLocaleString()}</li>
+              </ul>
+
+              <p><strong>Add this event to your calendar:</strong><br>
+              <a href="${calendarLink}" target="_blank" style="background-color:#4CAF50;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">Add to Google Calendar</a></p>
+
+              <p>Please find your ticket QR code below. You can also download it using the link provided:</p>
+
+              <img src="${
+                ticket.qrCode
+              }" alt="Ticket QR Code" style="max-width: 200px;">
+
+              <p><a href="${
+                ticket.qrCode
+              }" download="ticket_qrcode.png">Download QR Code</a></p>
+
+              <p>Best regards,<br>V Ticket Team</p>
+`;
+
+      // const mailMessage = `
+      //   <p>Dear ${name},</p>
+
+      //   <p>Thank you for purchasing a ticket for the event "${event.title}".</p>
+      //   <p>Here are your ticket details:</p>
+
+      //   <ul>
+      //     <li><strong>Event:</strong> ${event.title}</li>
+      //     <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+      //     <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+      //     <li><strong>Quantity:</strong> ${quantity}</li>
+      //     <li><strong>Date:</strong> ${new Date(
+      //       event.date
+      //     ).toLocaleDateString()}</li>
+      //   </ul>
+
+      //   <p>Please find your ticket QR code below. You can also download it using the link provided:</p>
+
+      //     <img src="${
+      //       ticket.qrCode
+      //     }" alt="Ticket QR Code" style="max-width: 200px;">
+
+      //     <p><a href="${
+      //       ticket.qrCode
+      //     }" download="ticket_qrcode.png">Download QR Code</a></p>
+      //     <p>Best regards,<br>V Ticket Team</p>
+      // `;
 
       try {
         await sendEmail({
@@ -640,5 +763,213 @@ export const handlePaymentVerification = async (
       error: "Internal server error",
       details: error.message,
     });
+  }
+};
+
+export const handlePaymentVerification = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { transactionId, reference } = req.body;
+
+  try {
+    let paymentDetails, totalAmount, ticketId, quantity, email, name;
+
+    if (transactionId) {
+      const flutterwaveResponse = await flw.Transaction.verify({
+        id: Number(transactionId),
+      });
+
+      paymentDetails = flutterwaveResponse.data;
+      if (paymentDetails.status !== "successful") {
+        return res.status(400).json({ error: "Payment verification failed" });
+      }
+
+      ({
+        amount: totalAmount,
+        meta: { ticketId, quantity },
+        customer: { email, name },
+      } = paymentDetails);
+    } else if (reference) {
+      const {
+        data: { data },
+      } = await axios.get(
+        `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
+        { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+      );
+
+      paymentDetails = data;
+      if (paymentDetails.status !== "success") {
+        return res.status(400).json({ error: "Payment verification failed" });
+      }
+
+      totalAmount = paymentDetails.amount / 100;
+      email = paymentDetails.customer.email;
+      ticketId = getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "ticket_id"
+      );
+      name = getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "full_name"
+      );
+      quantity = parseInt(
+        getCustomFieldValue(
+          paymentDetails.metadata?.custom_fields,
+          "quantity"
+        ) || "1",
+        10
+      );
+    } else {
+      return res.status(400).json({ error: "Missing transaction identifier" });
+    }
+
+    const paymentReference = paymentDetails.reference || paymentDetails.flw_ref;
+    const currency = paymentDetails.currency;
+    const id = paymentDetails.id;
+
+    const [existingTransaction, existingTicket] = await Promise.all([
+      TransactionInstance.findOne({
+        where: { paymentReference, paymentStatus: "successful" },
+      }),
+      TicketInstance.findOne({
+        where: { id: ticketId, paid: true, validationStatus: "valid" },
+      }),
+    ]);
+
+    if (existingTransaction && existingTicket) {
+      return res.status(400).json({ error: "Payment already processed." });
+    }
+
+    const transaction = await db.transaction();
+    try {
+      if (!existingTransaction) {
+        await TransactionInstance.create(
+          {
+            id,
+            email,
+            fullName: name,
+            ticketId,
+            paymentStatus: "successful",
+            totalAmount,
+            paymentReference,
+            currency,
+          },
+          { transaction }
+        );
+      }
+
+      const ticket = await TicketInstance.findOne({
+        where: { id: ticketId },
+        transaction,
+      });
+      if (!ticket) throw new Error("Ticket not found");
+
+      const event = await EventInstance.findOne({
+        where: { id: ticket.eventId },
+        transaction,
+      });
+      if (!event) throw new Error("Event not found");
+
+      ticket.validationStatus = "valid";
+      ticket.paid = true;
+      ticket.flwRef = paymentReference;
+      await ticket.save({ transaction });
+
+      const ticketType = event.ticketType.find(
+        (t) => t.name === ticket.ticketType
+      );
+      if (!ticketType || ticketType.quantity < quantity) {
+        throw new Error("Not enough tickets available");
+      }
+      ticketType.sold = (
+        parseInt(ticketType.sold || "0") + quantity
+      ).toString();
+      ticketType.quantity = (
+        parseInt(ticketType.quantity || "0") - quantity
+      ).toString();
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id }, transaction }
+      );
+
+      const eventOwner = await UserInstance.findOne({
+        where: { id: event.userId },
+        transaction,
+      });
+      if (eventOwner) {
+        await NotificationInstance.create(
+          {
+            id: uuidv4(),
+            title: `Ticket purchased for "${event.title}"`,
+            message: `A ticket was purchased for "${
+              event.title
+            }". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
+              2
+            )}. Purchaser: ${ticket.fullName}.`,
+            userId: event.userId,
+            isRead: false,
+          },
+          { transaction }
+        );
+      }
+
+      const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+
+      await UserInstance.increment(
+        { totalEarnings: appOwnerEarnings },
+        { where: { id: ACCOUNT_OWNER_ID }, transaction }
+      );
+
+      const googleCalendarLink = generateGoogleCalendarLink(event);
+      const icsContent = generateICS(event);
+      const icsUrl = await uploadICSFileToCloudinary(
+        `event-${event.id}.ics`,
+        icsContent
+      );
+
+      const mailMessage = `
+        <p>Dear ${name},</p>
+        <p>Thank you for purchasing a ticket to "${event.title}".</p>
+        <p>Event Details:</p>
+        <ul>
+          <li><strong>Event:</strong> ${event.title}</li>
+          <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+          <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+          <li><strong>Date:</strong> ${new Date(
+            event.date
+          ).toLocaleDateString()}</li>
+        </ul>
+        <p>Your QR Code:</p>
+        <img src="${ticket.qrCode}" style="max-width: 200px;">
+        <p><a href="${
+          ticket.qrCode
+        }" download="ticket_qr.png">Download QR Code</a></p>
+        <p><strong>Add to Calendar:</strong></p>
+        <ul>
+          <li><a href="${googleCalendarLink}" target="_blank">Google Calendar</a></li>
+          <li><a href="${icsUrl}" target="_blank">Outlook/Apple Calendar</a></li>
+        </ul>
+        <p>Best regards,<br>Event Team</p>
+      `;
+
+      await sendEmail({
+        email,
+        subject: `Your Ticket for "${event.title}"`,
+        message: mailMessage,
+      });
+
+      await transaction.commit();
+      res.status(200).json({ message: "Payment verified and processed" });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (err: any) {
+    console.error("Payment verification error:", err.message);
+    res
+      .status(500)
+      .json({ error: "Internal server error", details: err.message });
   }
 };

@@ -34,8 +34,8 @@ userRouter.get(
 );
 userRouter.get(
   "/all-users",
-  auth,
-  adminAuth,
+  // auth,
+  // adminAuth,
   allUsers
 );
 

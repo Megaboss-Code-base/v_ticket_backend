@@ -14,74 +14,19 @@ import { Op } from "sequelize";
 import { ModeratorInstance } from "../models/moderatorModel";
 import { NotificationInstance } from "../models/notificationModel";
 
-// Adjust import path if needed
-import Redis from "ioredis";
-
-// Initialize Redis client
-const redis = new Redis(); // Defaults to localhost:6379
-
-export const getAllEvents = async (req: Request, res: Response): Promise<any> => {
+export const getAllEvents = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-
-    // Unique cache key for pagination
-    const cacheKey = `all_events_page_${page}_limit_${limit}`;
-    
-    try {
-      const cachedEvents = await redis.get(cacheKey);
-      if (cachedEvents) {
-        return res.status(200).json({
-          counts: JSON.parse(cachedEvents).counts,
-          events: JSON.parse(cachedEvents).events,
-          fromCache: true, // Debugging aid
-        });
-      }
-    } catch (cacheError) {
-      console.error("Redis error:", cacheError); // Don't fail API due to Redis
-    }
-
-    // Fetch total count separately for better pagination
-    const totalEvents = await EventInstance.count();
-
-    // Fetch paginated events with sorting
-    const events = await EventInstance.findAll({
-      limit,
-      offset,
-      order: [["createdAt", "DESC"]], // Sort by latest events
-    });
-
-    if (events.length > 0) {
-      await redis.set(cacheKey, JSON.stringify({ counts: totalEvents, events }), "EX", 600);
-    }
-
-    return res.status(200).json({ counts: totalEvents, events, fromCache: false });
+    const events = await EventInstance.findAll();
+    return res.status(200).json({ counts: events.length, events });
   } catch (error: any) {
-    console.error("Error fetching events:", error);
-
-    return res.status(500).json({
-      message: "Error fetching events",
-      error: error?.message || "Unknown error",
-    });
+    return res
+      .status(500)
+      .json({ message: "Error fetching events", error: error.message });
   }
 };
-
-
-
-// export const getAllEvents = async (
-//   req: Request,
-//   res: Response
-// ): Promise<any> => {
-//   try {
-//     const events = await EventInstance.findAll();
-//     return res.status(200).json({ counts: events.length, events });
-//   } catch (error: any) {
-//     return res
-//       .status(500)
-//       .json({ message: "Error fetching events", error: error.message });
-//   }
-// };
 
 export const getEventById = async (
   req: JwtPayload,

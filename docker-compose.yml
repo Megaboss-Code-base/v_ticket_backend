@@ -1,0 +1,94 @@
+services:
+  k6:
+    image: grafana/k6
+    container_name: k6
+    volumes:
+      - ./test-script.js:/scripts/test-script.js
+    environment:
+      - K6_PROMETHEUS_RW_SERVER_PORT=6565
+      - K6_OUT=experimental-prometheus-rw
+    command:
+      [
+        "run",
+        "--out",
+        "experimental-prometheus-rw=http://prometheus:9090/api/v1/write",
+        "/scripts/test-script.js",
+      ]
+    ports:
+      - "6565:6565"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml # ✅ Mount config file
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring:
+    driver: bridge
+# version: '3.8'
+
+# services:
+#   k6:
+#     image: grafana/k6
+#     container_name: k6
+#     volumes:
+#       - ./test-script.js:/scripts/test-script.js  # ✅ Mount test script
+#     environment:
+#       - K6_PROMETHEUS_RW_SERVER_PORT=6565  # ✅ Expose Prometheus metrics
+#       - K6_OUT=experimental-prometheus-rw  # ✅ Enable Prometheus output
+#     command:
+#       [
+#         "run",
+#         "--out",
+#         "experimental-prometheus-rw=http://prometheus:9090/api/v1/write",
+#         "/scripts/test-script.js"
+#       ]
+#     ports:
+#       - "6565:6565"  # ✅ Ensure the port is correctly exposed
+#     networks:
+#       - monitoring
+#     depends_on:
+#       - prometheus
+
+#   prometheus:
+#     image: prom/prometheus
+#     container_name: prometheus
+#     volumes:
+#       - ./prometheus.yml:/etc/prometheus/prometheus.yml  # ✅ Mount config file
+#     ports:
+#       - "9090:9090"
+#     networks:
+#       - monitoring
+
+#   grafana:
+#     image: grafana/grafana
+#     container_name: grafana
+#     ports:
+#       - "3001:3000"
+#     networks:
+#       - monitoring
+#     depends_on:
+#       - prometheus
+
+# networks:
+#   monitoring:
+#     driver: bridge

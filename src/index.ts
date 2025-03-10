@@ -6,8 +6,7 @@ import cors from "cors";
 import logger from "morgan";
 import helmet from "helmet";
 import cron from "node-cron";
-import rateLimit from "express-rate-limit";
-import compression from "compression";
+import client from "prom-client";
 
 import { db, port, URL } from "./config";
 import userRouter from "./routes/user";
@@ -17,49 +16,19 @@ import notificationRouter from "./routes/notification";
 import paymentRoutes from "./routes/payment";
 import { deleteExpiredEvents } from "./controllers/eventCtrl";
 
-// const Redis = require("ioredis");
-
-// // Use the REDIS_URL environment variable provided by Render
-// const redisUrl = process.env.REDIS_URL;
-
-// if (!redisUrl) {
-//   throw new Error("REDIS_URL is not set");
-// }
-
-// const redis = new Redis(redisUrl);
-
-// redis.on("connect", () => {
-//   console.log("Successfully connected to Redis!");
-// });
-
-// // Listen for the 'error' event to catch any connection errors
-// redis.on("error", (err:any) => {
-//   console.error("Redis connection error:", err);
-// });
-
-const Redis = require("ioredis");
-
-// Load from environment variables
-const REDIS_URL = process.env.REDIS_URL;
-
-const redis = new Redis(REDIS_URL);
-
-redis.ping()
-  .then(() => console.log("Successfully connected to Redis!"))
-  .catch((err:any) => console.error("Redis connection failed:", err));
-
-
 db.sync()
   .then(() => console.log("✅ Database connected successfully"))
   .catch((err) => console.error("❌ Database connection failed:", err));
 
 const app: Application = express();
+const collectDefaultMetrics = client.collectDefaultMetrics;
 
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP, please try again later.",
-  headers: true,
+// Enable Prometheus metrics collection
+collectDefaultMetrics();
+
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", client.register.contentType);
+  res.end(await client.register.metrics());
 });
 
 app.use(express.json());
@@ -68,9 +37,6 @@ app.use(logger("dev"));
 app.use(helmet());
 app.use(cors());
 // app.use(limiter);
-app.use(compression());
-
-
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/events", eventRouter);

@@ -100,18 +100,17 @@ export const register = async (req: Request, res: Response): Promise<any> => {
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 
-    // await sendEmail({
-    //   email: newEmail,
-    //   subject: "Verify Your Account",
-    //   message,
-    // });
+    await sendEmail({
+      email: newEmail,
+      subject: "Register Successfully",
+      message: `You are receiving this email because you (or someone else) has registered with this ${newEmail} address.`,
+    });
 
     await transaction.commit();
 
     return res.status(201).json({
-      message:
-        "User created successfully.",
-        // "User created successfully. Please check your email to verify your account.",
+      message: "User created successfully.",
+      // "User created successfully. Please check your email to verify your account.",
       user: userWithoutSensitiveData,
     });
   } catch (error: any) {
@@ -587,7 +586,9 @@ export const getMonthlyRegistrations = async (
 export const allUsers = async (req: Request, res: Response): Promise<any> => {
   try {
     const registrations = await UserInstance.findAll({
-      attributes: { exclude: ["password","totalEarnings","userValidationSecret"] },
+      attributes: {
+        exclude: ["password", "totalEarnings", "userValidationSecret"],
+      },
     });
 
     return res

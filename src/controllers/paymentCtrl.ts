@@ -23,7 +23,7 @@ import { NotificationInstance } from "../models/notificationModel";
 import sendEmail from "../utilities/sendMail";
 import { v2 as cloudinary } from "cloudinary";
 import { CLOUDINARY_URL } from "../config";
-import { uploadICSFileToCloudinary } from "../utilities/multer";
+import { sendTicketEmail } from "../utilities/sendTicketEmail";
 
 cloudinary.config({
   cloudinary_url: CLOUDINARY_URL,
@@ -43,40 +43,6 @@ const getCustomFieldValue = (
   );
   return field ? field.value : "";
 };
-
-function generateGoogleCalendarLink(event: any) {
-  const startDate = new Date(event.date).toISOString().replace(/[-:.]/g, "");
-  const endDate = startDate; // Assuming it's a one-day event
-
-  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-    event.title
-  )}&dates=${startDate}/${endDate}&details=${encodeURIComponent(
-    event.description || ""
-  )}&location=${encodeURIComponent(event.location || "")}&sf=true&output=xml`;
-}
-
-// Helper to generate .ics content
-function generateICS(event: any): string {
-  const formatDateForICS = (date: Date) =>
-    date
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .replace(/\.\d{3}Z$/, "");
-
-  const startDate = formatDateForICS(new Date(event.date));
-  const endDate = formatDateForICS(new Date(event.date)); // Update if multi-day
-
-  return `BEGIN:VCALENDAR
-          VERSION:2.0
-          BEGIN:VEVENT
-          SUMMARY:${event.title}
-          DESCRIPTION:${event.description || ""}
-          DTSTART:${startDate}
-          DTEND:${endDate}
-          LOCATION:${event.location || ""}
-          END:VEVENT
-          END:VCALENDAR`;
-}
 
 export const purchaseTicket = async (
   req: Request,
@@ -194,6 +160,8 @@ export const purchaseTicket = async (
         { ticketType: event.ticketType },
         { where: { id: event.id } }
       );
+
+      await sendTicketEmail(fullName, email, event, ticket, 0, currency);
 
       return res.status(200).json({
         message: "Ticket successfully created for free event",
@@ -922,43 +890,45 @@ export const handlePaymentVerification = async (
         { where: { id: ACCOUNT_OWNER_ID }, transaction }
       );
 
-      const googleCalendarLink = generateGoogleCalendarLink(event);
-      const icsContent = generateICS(event);
-      const icsUrl = await uploadICSFileToCloudinary(
-        `event-${event.id}.ics`,
-        icsContent
-      );
+      // const googleCalendarLink = generateGoogleCalendarLink(event);
+      // const icsContent = generateICS(event);
+      // const icsUrl = await uploadICSFileToCloudinary(
+      //   `event-${event.id}.ics`,
+      //   icsContent
+      // );
 
-      const mailMessage = `
-        <p>Dear ${name},</p>
-        <p>Thank you for purchasing a ticket to "${event.title}".</p>
-        <p>Event Details:</p>
-        <ul>
-          <li><strong>Event:</strong> ${event.title}</li>
-          <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
-          <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
-          <li><strong>Date:</strong> ${new Date(
-            event.date
-          ).toLocaleDateString()}</li>
-        </ul>
-        <p>Your QR Code:</p>
-        <img src="${ticket.qrCode}" style="max-width: 200px;">
-        <p><a href="${
-          ticket.qrCode
-        }" download="ticket_qr.png">Download QR Code</a></p>
-        <p><strong>Add to Calendar:</strong></p>
-        <ul>
-          <li><a href="${googleCalendarLink}" target="_blank">Google Calendar</a></li>
-          <li><a href="${icsUrl}" target="_blank">Outlook/Apple Calendar</a></li>
-        </ul>
-        <p>Best regards,<br>Event Team</p>
-      `;
+      // const mailMessage = `
+      //   <p>Dear ${name},</p>
+      //   <p>Thank you for purchasing a ticket to "${event.title}".</p>
+      //   <p>Event Details:</p>
+      //   <ul>
+      //     <li><strong>Event:</strong> ${event.title}</li>
+      //     <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+      //     <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+      //     <li><strong>Date:</strong> ${new Date(
+      //       event.date
+      //     ).toLocaleDateString()}</li>
+      //   </ul>
+      //   <p>Your QR Code:</p>
+      //   <img src="${ticket.qrCode}" style="max-width: 200px;">
+      //   <p><a href="${
+      //     ticket.qrCode
+      //   }" download="ticket_qr.png">Download QR Code</a></p>
+      //   <p><strong>Add to Calendar:</strong></p>
+      //   <ul>
+      //     <li><a href="${googleCalendarLink}" target="_blank">Google Calendar</a></li>
+      //     <li><a href="${icsUrl}" target="_blank">Outlook/Apple Calendar</a></li>
+      //   </ul>
+      //   <p>Best regards,<br>Event Team</p>
+      // `;
 
-      await sendEmail({
-        email,
-        subject: `Your Ticket for "${event.title}"`,
-        message: mailMessage,
-      });
+      // await sendEmail({
+      //   email,
+      //   subject: `Your Ticket for "${event.title}"`,
+      //   message: mailMessage,
+      // });
+
+      await sendTicketEmail(name, email, event, ticket, totalAmount, currency);
 
       await transaction.commit();
       res.status(200).json({ message: "Payment verified and processed" });

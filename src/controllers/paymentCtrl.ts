@@ -113,6 +113,8 @@ export const purchaseTicket = async (
       });
     }
 
+    const recipients = [{ name: fullName, email }, ...(attendees || [])];
+
     const ticketPrice = parseFloat(ticketInfo.price);
     const ticketId = uuidv4();
     const signature = generateTicketSignature(ticketId);
@@ -161,7 +163,7 @@ export const purchaseTicket = async (
         { where: { id: event.id } }
       );
 
-      await sendTicketEmail(fullName, email, event, ticket, 0, currency);
+      await sendTicketEmail(fullName, email, event, ticket, 0, currency, 0);
 
       return res.status(200).json({
         message: "Ticket successfully created for free event",
@@ -187,7 +189,7 @@ export const purchaseTicket = async (
       paid: false,
       currency,
       attendees: attendees || [{ name: fullName, email }],
-      validationStatus: "invalid",
+      validationStatus: "valid",
       isScanned: false,
     });
 
@@ -213,6 +215,7 @@ export const purchaseTicket = async (
           meta: {
             ticketId,
             quantity,
+            ticketPrice,
           },
           amount: totalPrice,
           currency,
@@ -281,6 +284,11 @@ export const purchaseTicket = async (
                   variable_name: "full_name",
                   value: fullName,
                 },
+                {
+                  display_name: "Ticket Price",
+                  variable_name: "ticket_price",
+                  value: ticketPrice,
+                },
               ],
             },
           },
@@ -312,6 +320,257 @@ export const purchaseTicket = async (
         });
       }
     }
+
+    // if (!event) {
+    //   return res.status(404).json({ error: "Event not found" });
+    // }
+
+    // const eventDate = new Date(event.date);
+    // const today = new Date();
+
+    // today.setHours(0, 0, 0, 0);
+    // eventDate.setHours(0, 0, 0, 0);
+
+    // const eventDateString = eventDate.toISOString().split("T")[0];
+    // const todayDateString = today.toISOString().split("T")[0];
+
+    // if (eventDateString < todayDateString) {
+    //   return res.status(400).json({
+    //     error: "Cannot purchase tickets for expired events",
+    //   });
+    // }
+
+    // if (!Array.isArray(event.ticketType)) {
+    //   return res.status(400).json({ error: "Invalid ticket type structure" });
+    // }
+
+    // const ticketInfo = event.ticketType.find(
+    //   (ticket) => ticket.name === ticketType
+    // );
+
+    // if (!ticketInfo) {
+    //   return res.status(400).json({ error: "Invalid ticket type" });
+    // }
+
+    // if (Number(ticketInfo.quantity) < quantity) {
+    //   return res.status(400).json({
+    //     error: `Only ${ticketInfo.quantity} tickets are available for the selected type`,
+    //   });
+    // }
+
+    // const recipients = [{ name: fullName, email }, ...(attendees || [])];
+
+    // const ticketPrice = parseFloat(ticketInfo.price);
+    // const ticketId = uuidv4();
+    // const signature = generateTicketSignature(ticketId);
+    // const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+
+    // const qrCodeBuffer = await QRCode.toBuffer(qrCodeData);
+
+    // const cloudinaryResult = await new Promise<string>((resolve, reject) => {
+    //   const uploadStream = cloudinary.uploader.upload_stream(
+    //     { folder: "qrcodes", resource_type: "image" },
+    //     (error, result) => {
+    //       if (error) {
+    //         console.error("Cloudinary upload error:", error);
+    //         return reject(error);
+    //       }
+    //       resolve(result?.url || "");
+    //     }
+    //   );
+
+    //   uploadStream.end(qrCodeBuffer);
+    // });
+
+    // if (ticketPrice === 0) {
+    //   const ticket = await TicketInstance.create({
+    //     id: ticketId,
+    //     email,
+    //     phone,
+    //     fullName,
+    //     eventId: event.id,
+    //     ticketType,
+    //     price: 0,
+    //     purchaseDate: new Date(),
+    //     qrCode: cloudinaryResult,
+    //     paid: true,
+    //     currency,
+    //     attendees: attendees || [{ name: fullName, email }],
+    //     validationStatus: "valid",
+    //     isScanned: false,
+    //   });
+
+    //   ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
+    //   ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
+
+    //   await EventInstance.update(
+    //     { ticketType: event.ticketType },
+    //     { where: { id: event.id } }
+    //   );
+
+    //   // await sendTicketEmail(fullName, email, event, ticket, 0, currency);
+    //   const recipients = [{ name: fullName, email }, ...(attendees || [])];
+
+    //   for (const recipient of recipients) {
+    //     await sendTicketEmail(
+    //       recipient.name,
+    //       recipient.email,
+    //       event,
+    //       ticket,
+    //       0,
+    //       currency
+    //     );
+    //   }
+
+    //   return res.status(200).json({
+    //     message: "Ticket successfully created for free event",
+    //     ticketId: ticket.id,
+    //     redirect: FRONTEND_URL,
+    //     ticket,
+    //   });
+    // }
+
+    // // For paid tickets
+    // const totalPrice = ticketPrice * quantity;
+
+    // const ticket = await TicketInstance.create({
+    //   id: ticketId,
+    //   email,
+    //   phone,
+    //   fullName,
+    //   eventId: event.id,
+    //   ticketType,
+    //   price: totalPrice,
+    //   purchaseDate: new Date(),
+    //   qrCode: cloudinaryResult,
+    //   paid: false,
+    //   currency,
+    //   attendees: attendees || [{ name: fullName, email }],
+    //   validationStatus: "valid",
+    //   isScanned: false,
+    // });
+
+    // const eventOwner = (await UserInstance.findOne({
+    //   where: { id: event.userId },
+    // })) as unknown as UserAttribute;
+
+    // if (!eventOwner) {
+    //   return res.status(404).json({ error: "Event owner not found" });
+    // }
+
+    // const tx_ref = generateReference();
+
+    // // Attempt to create a Flutterwave payment link
+    // try {
+    //   const flutterwaveResponse = await axios.post(
+    //     `${FLUTTERWAVE_BASE_URL}/payments`,
+    //     {
+    //       customer: {
+    //         name: fullName,
+    //         email,
+    //       },
+    //       meta: {
+    //         ticketId,
+    //         quantity,
+    //       },
+    //       amount: totalPrice,
+    //       currency,
+    //       tx_ref,
+    //       redirect_url: `${FRONTEND_URL}/success?ticketId=${ticketId}`,
+    //       subaccounts: [
+    //         {
+    //           id: process.env.APP_OWNER_SUBACCOUNT_ID,
+    //           transaction_split_ratio: 10,
+    //         },
+    //         {
+    //           bank_account: {
+    //             account_bank: eventOwner.account_bank,
+    //             account_number: eventOwner.account_number,
+    //           },
+    //           country: eventOwner.country,
+    //           transaction_split_ratio: 90,
+    //         },
+    //       ],
+    //     },
+    //     {
+    //       headers: {
+    //         Authorization: `Bearer ${FLUTTERWAVE_SECRET_KEY}`,
+    //         "Content-Type": "application/json",
+    //       },
+    //     }
+    //   );
+
+    //   if (
+    //     flutterwaveResponse.data &&
+    //     flutterwaveResponse.data.data &&
+    //     flutterwaveResponse.data.data.link
+    //   ) {
+    //     return res.status(200).json({
+    //       link: flutterwaveResponse.data.data.link,
+    //       ticketId,
+    //     });
+    //   } else {
+    //     throw new Error("Error creating Flutterwave payment link");
+    //   }
+    // } catch (flutterwaveError: any) {
+    //   console.error("Flutterwave error:", flutterwaveError.message);
+
+    //   // Fallback to Paystack
+    //   try {
+    //     const paystackResponse = await axios.post(
+    //       `${PAYSTACK_BASE_URL}/transaction/initialize`,
+    //       {
+    //         email,
+    //         amount: totalPrice * 100, // Paystack expects amount in kobo/cents
+    //         callback_url: `${FRONTEND_URL}/success?ticketId=${ticketId}`,
+    //         metadata: {
+    //           custom_fields: [
+    //             {
+    //               display_name: "Ticket ID",
+    //               variable_name: "ticket_id",
+    //               value: ticketId,
+    //             },
+    //             {
+    //               display_name: "Quantity",
+    //               variable_name: "quantity",
+    //               value: quantity.toString(),
+    //             },
+    //             {
+    //               display_name: "Full Name",
+    //               variable_name: "full_name",
+    //               value: fullName,
+    //             },
+    //           ],
+    //         },
+    //       },
+    //       {
+    //         headers: {
+    //           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+    //           "Content-Type": "application/json",
+    //         },
+    //       }
+    //     );
+
+    //     if (
+    //       paystackResponse.data &&
+    //       paystackResponse.data.data &&
+    //       paystackResponse.data.data.authorization_url
+    //     ) {
+    //       return res.status(200).json({
+    //         link: paystackResponse.data.data.authorization_url,
+    //         ticketId,
+    //       });
+    //     } else {
+    //       throw new Error("Error creating Paystack payment link");
+    //     }
+    //   } catch (paystackError: any) {
+    //     console.log(`Paystack error:`, paystackError.message);
+    //     return res.status(500).json({
+    //       error:
+    //         "Failed to create payment link with both Flutterwave and Paystack",
+    //     });
+    //   }
+    // }
   } catch (error: any) {
     return res.status(500).json({
       error: "Failed to create ticket",
@@ -328,6 +587,84 @@ export const handleUnifiedWebhook = async (
     // Validate Flutterwave webhook
     const flutterwaveSignature =
       req.headers["verif-hash"] || req.headers["Verif-Hash"];
+
+    // if (
+    //   flutterwaveSignature &&
+    //   flutterwaveSignature === FLUTTERWAVE_HASH_SECRET
+    // ) {
+    //   const payload = req.body;
+    //   if (payload.data.status === "successful") {
+    //     const { ticketId } = payload.meta_data;
+    //     const { email, name } = payload.data.customer;
+    //     const totalAmount = payload.data.amount;
+    //     const paymentReference = payload.data.flw_ref;
+    //     const currency = payload.data.currency;
+
+    //     await TransactionInstance.create({
+    //       id: payload.data.id,
+    //       email,
+    //       fullName: name,
+    //       ticketId,
+    //       paymentStatus: "successful",
+    //       totalAmount,
+    //       paymentReference,
+    //       currency,
+    //     });
+
+    //     return res
+    //       .status(200)
+    //       .json({ message: "Flutterwave webhook processed successfully" });
+    //   } else {
+    //     return res
+    //       .status(400)
+    //       .json({ error: "Flutterwave payment was not successful" });
+    //   }
+    // }
+
+    // // Validate Paystack webhook
+    // const paystackSignature = Array.isArray(req.headers["x-paystack-signature"])
+    //   ? req.headers["x-paystack-signature"][0]
+    //   : req.headers["x-paystack-signature"];
+
+    // if (!paystackSignature) {
+    //   return res.status(401).json({ error: "Missing Paystack signature" });
+    // }
+
+    // const payload = req.body;
+    // const payloadString = JSON.stringify(req.body);
+
+    // if (validatePaystackWebhook(paystackSignature, payloadString)) {
+    //   if (req.body.event === "charge.success") {
+    //     const { id, reference, amount, currency, metadata } = payload.data;
+    //     const { email } = payload.data.customer;
+    //     const totalAmount = amount / 100; // Convert back to base currency
+
+    //     const customFields = metadata?.custom_fields || [];
+    //     const ticketId = getCustomFieldValue(customFields, "ticket_id");
+    //     const fullName = getCustomFieldValue(customFields, "full_name");
+
+    //     await TransactionInstance.create({
+    //       id,
+    //       email,
+    //       fullName,
+    //       ticketId,
+    //       paymentStatus: "successful",
+    //       totalAmount,
+    //       paymentReference: reference,
+    //       currency,
+    //     });
+
+    //     return res
+    //       .status(200)
+    //       .json({ message: "Paystack webhook processed successfully" });
+    //   } else {
+    //     return res
+    //       .status(400)
+    //       .json({ error: "Invalid Paystack webhook event" });
+    //   }
+    // }
+
+    // return res.status(401).json({ error: "Invalid webhook signature" });
 
     if (
       flutterwaveSignature &&
@@ -412,6 +749,355 @@ export const handleUnifiedWebhook = async (
       error: "Internal server error",
       details: error.message,
     });
+  }
+};
+
+export const handlePaymentVerification = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { transactionId, reference } = req.body;
+
+  try {
+    let paymentDetails,
+      totalAmount,
+      ticketId,
+      ticketPrice,
+      quantity,
+      email,
+      name;
+
+    // if (transactionId) {
+    //   const flutterwaveResponse = await flw.Transaction.verify({
+    //     id: Number(transactionId),
+    //   });
+
+    //   paymentDetails = flutterwaveResponse.data;
+    //   if (paymentDetails.status !== "successful") {
+    //     return res.status(400).json({ error: "Payment verification failed" });
+    //   }
+
+    //   ({
+    //     amount: totalAmount,
+    //     meta: { ticketId, quantity },
+    //     customer: { email, name },
+    //   } = paymentDetails);
+    // } else if (reference) {
+    //   const {
+    //     data: { data },
+    //   } = await axios.get(
+    //     `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
+    //     { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+    //   );
+
+    //   paymentDetails = data;
+    //   if (paymentDetails.status !== "success") {
+    //     return res.status(400).json({ error: "Payment verification failed" });
+    //   }
+
+    //   totalAmount = paymentDetails.amount / 100;
+    //   email = paymentDetails.customer.email;
+    //   ticketId = getCustomFieldValue(
+    //     paymentDetails.metadata?.custom_fields,
+    //     "ticket_id"
+    //   );
+    //   name = getCustomFieldValue(
+    //     paymentDetails.metadata?.custom_fields,
+    //     "full_name"
+    //   );
+    //   quantity = parseInt(
+    //     getCustomFieldValue(
+    //       paymentDetails.metadata?.custom_fields,
+    //       "quantity"
+    //     ) || "1",
+    //     10
+    //   );
+    // } else {
+    //   return res.status(400).json({ error: "Missing transaction identifier" });
+    // }
+
+    // const paymentReference = paymentDetails.reference || paymentDetails.flw_ref;
+    // const currency = paymentDetails.currency;
+    // const id = paymentDetails.id;
+
+    // const [existingTransaction, existingTicket] = await Promise.all([
+    //   TransactionInstance.findOne({
+    //     where: { paymentReference, paymentStatus: "successful" },
+    //   }),
+    //   TicketInstance.findOne({
+    //     where: { id: ticketId, paid: true, validationStatus: "valid" },
+    //   }),
+    // ]);
+
+    // if (existingTransaction && existingTicket) {
+    //   return res.status(400).json({ error: "Payment already processed." });
+    // }
+
+    // const transaction = await db.transaction();
+    // try {
+    //   if (!existingTransaction) {
+    //     await TransactionInstance.create(
+    //       {
+    //         id,
+    //         email,
+    //         fullName: name,
+    //         ticketId,
+    //         paymentStatus: "successful",
+    //         totalAmount,
+    //         paymentReference,
+    //         currency,
+    //       },
+    //       { transaction }
+    //     );
+    //   }
+
+    //   const ticket = await TicketInstance.findOne({
+    //     where: { id: ticketId },
+    //     transaction,
+    //   });
+    //   if (!ticket) throw new Error("Ticket not found");
+
+    //   const event = await EventInstance.findOne({
+    //     where: { id: ticket.eventId },
+    //     transaction,
+    //   });
+    //   if (!event) throw new Error("Event not found");
+
+    //   ticket.validationStatus = "valid";
+    //   ticket.paid = true;
+    //   ticket.flwRef = paymentReference;
+    //   await ticket.save({ transaction });
+
+    //   const ticketType = event.ticketType.find(
+    //     (t) => t.name === ticket.ticketType
+    //   );
+    //   if (!ticketType || ticketType.quantity < quantity) {
+    //     throw new Error("Not enough tickets available");
+    //   }
+    //   ticketType.sold = (
+    //     parseInt(ticketType.sold || "0") + quantity
+    //   ).toString();
+    //   ticketType.quantity = (
+    //     parseInt(ticketType.quantity || "0") - quantity
+    //   ).toString();
+
+    //   await EventInstance.update(
+    //     { ticketType: event.ticketType },
+    //     { where: { id: event.id }, transaction }
+    //   );
+
+    //   const eventOwner = await UserInstance.findOne({
+    //     where: { id: event.userId },
+    //     transaction,
+    //   });
+    //   if (eventOwner) {
+    //     await NotificationInstance.create(
+    //       {
+    //         id: uuidv4(),
+    //         title: `Ticket purchased for "${event.title}"`,
+    //         message: `A ticket was purchased for "${
+    //           event.title
+    //         }". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
+    //           2
+    //         )}. Purchaser: ${ticket.fullName}.`,
+    //         userId: event.userId,
+    //         isRead: false,
+    //       },
+    //       { transaction }
+    //     );
+    //   }
+
+    //   const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+
+    //   await UserInstance.increment(
+    //     { totalEarnings: appOwnerEarnings },
+    //     { where: { id: ACCOUNT_OWNER_ID }, transaction }
+    //   );
+
+    //   await sendTicketEmail(name, email, event, ticket, totalAmount, currency);
+
+    //   await transaction.commit();
+    //   res.status(200).json({ message: "Payment verified and processed" });
+    // } catch (err) {
+    //   await transaction.rollback();
+    //   throw err;
+    // }
+
+    if (transactionId) {
+      const flutterwaveResponse = await flw.Transaction.verify({
+        id: Number(transactionId),
+      });
+
+      paymentDetails = flutterwaveResponse.data;
+      if (paymentDetails.status !== "successful") {
+        return res.status(400).json({ error: "Payment verification failed" });
+      }
+
+      ({
+        amount: totalAmount,
+        meta: { ticketId, quantity, ticketPrice },
+        customer: { email, name },
+      } = paymentDetails);
+    } else if (reference) {
+      const {
+        data: { data },
+      } = await axios.get(
+        `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
+        { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+      );
+
+      paymentDetails = data;
+      if (paymentDetails.status !== "success") {
+        return res.status(400).json({ error: "Payment verification failed" });
+      }
+
+      totalAmount = paymentDetails.amount / 100;
+      email = paymentDetails.customer.email;
+      ticketId = getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "ticket_id"
+      );
+      name = getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "full_name"
+      );
+      quantity = parseInt(
+        getCustomFieldValue(
+          paymentDetails.metadata?.custom_fields,
+          "quantity"
+        ) || "1",
+        10
+      );
+      ticketPrice = parseInt(
+        getCustomFieldValue(
+          paymentDetails.metadata?.custom_fields,
+          "ticket_price"
+        ) || "1",
+        10
+      );
+    } else {
+      return res.status(400).json({ error: "Missing transaction identifier" });
+    }
+
+    const paymentReference = paymentDetails.reference || paymentDetails.flw_ref;
+    const currency = paymentDetails.currency;
+    const id = paymentDetails.id;
+
+    const [existingTransaction, existingTicket] = await Promise.all([
+      TransactionInstance.findOne({
+        where: { paymentReference, paymentStatus: "successful" },
+      }),
+      TicketInstance.findOne({
+        where: { id: ticketId, paid: true, validationStatus: "valid" },
+      }),
+    ]);
+
+    if (existingTransaction && existingTicket) {
+      return res.status(400).json({ error: "Payment already processed." });
+    }
+
+    const transaction = await db.transaction();
+    try {
+      if (!existingTransaction) {
+        await TransactionInstance.create(
+          {
+            id,
+            email,
+            fullName: name,
+            ticketId,
+            paymentStatus: "successful",
+            totalAmount,
+            paymentReference,
+            currency,
+          },
+          { transaction }
+        );
+      }
+
+      const ticket = await TicketInstance.findOne({
+        where: { id: ticketId },
+        transaction,
+      });
+      if (!ticket) throw new Error("Ticket not found");
+
+      const event = await EventInstance.findOne({
+        where: { id: ticket.eventId },
+        transaction,
+      });
+      if (!event) throw new Error("Event not found");
+
+      ticket.validationStatus = "valid";
+      ticket.paid = true;
+      ticket.flwRef = paymentReference;
+      await ticket.save({ transaction });
+
+      const ticketType = event.ticketType.find(
+        (t) => t.name === ticket.ticketType
+      );
+      if (!ticketType || ticketType.quantity < quantity) {
+        throw new Error("Not enough tickets available");
+      }
+      ticketType.sold = (
+        parseInt(ticketType.sold || "0") + quantity
+      ).toString();
+      ticketType.quantity = (
+        parseInt(ticketType.quantity || "0") - quantity
+      ).toString();
+
+      await EventInstance.update(
+        { ticketType: event.ticketType },
+        { where: { id: event.id }, transaction }
+      );
+
+      const eventOwner = await UserInstance.findOne({
+        where: { id: event.userId },
+        transaction,
+      });
+      if (eventOwner) {
+        await NotificationInstance.create(
+          {
+            id: uuidv4(),
+            title: `Ticket purchased for "${event.title}"`,
+            message: `A ticket was purchased for "${
+              event.title
+            }". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
+              2
+            )}. Purchaser: ${ticket.fullName}.`,
+            userId: event.userId,
+            isRead: false,
+          },
+          { transaction }
+        );
+      }
+
+      const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+
+      await UserInstance.increment(
+        { totalEarnings: appOwnerEarnings },
+        { where: { id: ACCOUNT_OWNER_ID }, transaction }
+      );
+
+      await sendTicketEmail(
+        name,
+        email,
+        event,
+        ticket,
+        totalAmount,
+        currency,
+        ticketPrice
+      );
+
+      await transaction.commit();
+      res.status(200).json({ message: "Payment verified and processed" });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (err: any) {
+    console.error("Payment verification error:", err.message);
+    res
+      .status(500)
+      .json({ error: "Internal server error", details: err.message });
   }
 };
 
@@ -675,35 +1361,6 @@ export const handlePaymentVerification1 = async (
 
               <p>Best regards,<br>V Ticket Team</p>
 `;
-
-      // const mailMessage = `
-      //   <p>Dear ${name},</p>
-
-      //   <p>Thank you for purchasing a ticket for the event "${event.title}".</p>
-      //   <p>Here are your ticket details:</p>
-
-      //   <ul>
-      //     <li><strong>Event:</strong> ${event.title}</li>
-      //     <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
-      //     <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
-      //     <li><strong>Quantity:</strong> ${quantity}</li>
-      //     <li><strong>Date:</strong> ${new Date(
-      //       event.date
-      //     ).toLocaleDateString()}</li>
-      //   </ul>
-
-      //   <p>Please find your ticket QR code below. You can also download it using the link provided:</p>
-
-      //     <img src="${
-      //       ticket.qrCode
-      //     }" alt="Ticket QR Code" style="max-width: 200px;">
-
-      //     <p><a href="${
-      //       ticket.qrCode
-      //     }" download="ticket_qrcode.png">Download QR Code</a></p>
-      //     <p>Best regards,<br>V Ticket Team</p>
-      // `;
-
       try {
         await sendEmail({
           email,
@@ -731,215 +1388,5 @@ export const handlePaymentVerification1 = async (
       error: "Internal server error",
       details: error.message,
     });
-  }
-};
-
-export const handlePaymentVerification = async (
-  req: Request,
-  res: Response
-): Promise<any> => {
-  const { transactionId, reference } = req.body;
-
-  try {
-    let paymentDetails, totalAmount, ticketId, quantity, email, name;
-
-    if (transactionId) {
-      const flutterwaveResponse = await flw.Transaction.verify({
-        id: Number(transactionId),
-      });
-
-      paymentDetails = flutterwaveResponse.data;
-      if (paymentDetails.status !== "successful") {
-        return res.status(400).json({ error: "Payment verification failed" });
-      }
-
-      ({
-        amount: totalAmount,
-        meta: { ticketId, quantity },
-        customer: { email, name },
-      } = paymentDetails);
-    } else if (reference) {
-      const {
-        data: { data },
-      } = await axios.get(
-        `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
-        { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
-      );
-
-      paymentDetails = data;
-      if (paymentDetails.status !== "success") {
-        return res.status(400).json({ error: "Payment verification failed" });
-      }
-
-      totalAmount = paymentDetails.amount / 100;
-      email = paymentDetails.customer.email;
-      ticketId = getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "ticket_id"
-      );
-      name = getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "full_name"
-      );
-      quantity = parseInt(
-        getCustomFieldValue(
-          paymentDetails.metadata?.custom_fields,
-          "quantity"
-        ) || "1",
-        10
-      );
-    } else {
-      return res.status(400).json({ error: "Missing transaction identifier" });
-    }
-
-    const paymentReference = paymentDetails.reference || paymentDetails.flw_ref;
-    const currency = paymentDetails.currency;
-    const id = paymentDetails.id;
-
-    const [existingTransaction, existingTicket] = await Promise.all([
-      TransactionInstance.findOne({
-        where: { paymentReference, paymentStatus: "successful" },
-      }),
-      TicketInstance.findOne({
-        where: { id: ticketId, paid: true, validationStatus: "valid" },
-      }),
-    ]);
-
-    if (existingTransaction && existingTicket) {
-      return res.status(400).json({ error: "Payment already processed." });
-    }
-
-    const transaction = await db.transaction();
-    try {
-      if (!existingTransaction) {
-        await TransactionInstance.create(
-          {
-            id,
-            email,
-            fullName: name,
-            ticketId,
-            paymentStatus: "successful",
-            totalAmount,
-            paymentReference,
-            currency,
-          },
-          { transaction }
-        );
-      }
-
-      const ticket = await TicketInstance.findOne({
-        where: { id: ticketId },
-        transaction,
-      });
-      if (!ticket) throw new Error("Ticket not found");
-
-      const event = await EventInstance.findOne({
-        where: { id: ticket.eventId },
-        transaction,
-      });
-      if (!event) throw new Error("Event not found");
-
-      ticket.validationStatus = "valid";
-      ticket.paid = true;
-      ticket.flwRef = paymentReference;
-      await ticket.save({ transaction });
-
-      const ticketType = event.ticketType.find(
-        (t) => t.name === ticket.ticketType
-      );
-      if (!ticketType || ticketType.quantity < quantity) {
-        throw new Error("Not enough tickets available");
-      }
-      ticketType.sold = (
-        parseInt(ticketType.sold || "0") + quantity
-      ).toString();
-      ticketType.quantity = (
-        parseInt(ticketType.quantity || "0") - quantity
-      ).toString();
-
-      await EventInstance.update(
-        { ticketType: event.ticketType },
-        { where: { id: event.id }, transaction }
-      );
-
-      const eventOwner = await UserInstance.findOne({
-        where: { id: event.userId },
-        transaction,
-      });
-      if (eventOwner) {
-        await NotificationInstance.create(
-          {
-            id: uuidv4(),
-            title: `Ticket purchased for "${event.title}"`,
-            message: `A ticket was purchased for "${
-              event.title
-            }". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
-              2
-            )}. Purchaser: ${ticket.fullName}.`,
-            userId: event.userId,
-            isRead: false,
-          },
-          { transaction }
-        );
-      }
-
-      const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
-
-      await UserInstance.increment(
-        { totalEarnings: appOwnerEarnings },
-        { where: { id: ACCOUNT_OWNER_ID }, transaction }
-      );
-
-      // const googleCalendarLink = generateGoogleCalendarLink(event);
-      // const icsContent = generateICS(event);
-      // const icsUrl = await uploadICSFileToCloudinary(
-      //   `event-${event.id}.ics`,
-      //   icsContent
-      // );
-
-      // const mailMessage = `
-      //   <p>Dear ${name},</p>
-      //   <p>Thank you for purchasing a ticket to "${event.title}".</p>
-      //   <p>Event Details:</p>
-      //   <ul>
-      //     <li><strong>Event:</strong> ${event.title}</li>
-      //     <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
-      //     <li><strong>Price:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
-      //     <li><strong>Date:</strong> ${new Date(
-      //       event.date
-      //     ).toLocaleDateString()}</li>
-      //   </ul>
-      //   <p>Your QR Code:</p>
-      //   <img src="${ticket.qrCode}" style="max-width: 200px;">
-      //   <p><a href="${
-      //     ticket.qrCode
-      //   }" download="ticket_qr.png">Download QR Code</a></p>
-      //   <p><strong>Add to Calendar:</strong></p>
-      //   <ul>
-      //     <li><a href="${googleCalendarLink}" target="_blank">Google Calendar</a></li>
-      //     <li><a href="${icsUrl}" target="_blank">Outlook/Apple Calendar</a></li>
-      //   </ul>
-      //   <p>Best regards,<br>Event Team</p>
-      // `;
-
-      // await sendEmail({
-      //   email,
-      //   subject: `Your Ticket for "${event.title}"`,
-      //   message: mailMessage,
-      // });
-
-      await sendTicketEmail(name, email, event, ticket, totalAmount, currency);
-
-      await transaction.commit();
-      res.status(200).json({ message: "Payment verified and processed" });
-    } catch (err) {
-      await transaction.rollback();
-      throw err;
-    }
-  } catch (err: any) {
-    console.error("Payment verification error:", err.message);
-    res
-      .status(500)
-      .json({ error: "Internal server error", details: err.message });
   }
 };

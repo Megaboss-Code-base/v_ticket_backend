@@ -41,6 +41,9 @@ export class EventInstance extends Model<
   declare socialMediaLinks: SocialMediaLinks | null;
   declare hostName: string;
   declare userId: string;
+  declare isVirtual: boolean | null;
+  declare virtualLink: string | null;
+  declare virtualPassword: string | null;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -127,6 +130,19 @@ EventInstance.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: false,
+    },
+    isVirtual: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    virtualLink: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    virtualPassword: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     createdAt: {
       type: DataTypes.DATE,

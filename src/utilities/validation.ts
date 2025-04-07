@@ -46,7 +46,10 @@ export const validate = <T>(
   });
 
   if (error) {
-    return { value, error: error.details.map((err:any) => err.message).join(", ") };
+    return {
+      value,
+      error: error.details.map((err: any) => err.message).join(", "),
+    };
   }
 
   return { value };
@@ -59,26 +62,42 @@ export const eventValidationSchema = Joi.object({
   location: Joi.string().required(),
   time: Joi.string().required(),
   venue: Joi.string().required(),
-  ticketType: Joi.string().required(), 
+  ticketType: Joi.string().required(),
   socialMediaLinks: Joi.alternatives().try(
     Joi.object().optional(),
     Joi.string().optional()
   ),
-  });
+  isVirtual: Joi.boolean().required(),
+  virtualLink: Joi.string()
+    .uri()
+    .when("isVirtual", {
+      is: true,
+      then: Joi.required().messages({
+        "any.required": "Virtual link is required when event is virtual",
+        "string.uri": "Virtual link must be a valid URL",
+      }),
+      otherwise: Joi.optional(),
+    }),
+  virtualPassword: Joi.string().when("isVirtual", {
+    is: true,
+    then: Joi.required().messages({
+      "any.required": "Virtual password is required when event is virtual",
+    }),
+    otherwise: Joi.optional(),
+  }),
+});
 
-  export const updateEventValidationSchema = Joi.object({
-    title: Joi.string().optional(),
-    description: Joi.string().optional(),
-    date: Joi.date().optional(),
-    location: Joi.string().optional(),
-    time: Joi.string().optional(),
-    venue: Joi.string().optional(),
-    image: Joi.string().optional(),
-    gallery: Joi.array().items(Joi.string()).optional(),
-    socialMediaLinks: Joi.alternatives()
-      .try(Joi.object().optional(), Joi.string().optional())
-      .optional(),
-    ticketType: Joi.string().optional(),
-  });
-
-
+export const updateEventValidationSchema = Joi.object({
+  title: Joi.string().optional(),
+  description: Joi.string().optional(),
+  date: Joi.date().optional(),
+  location: Joi.string().optional(),
+  time: Joi.string().optional(),
+  venue: Joi.string().optional(),
+  image: Joi.string().optional(),
+  gallery: Joi.array().items(Joi.string()).optional(),
+  socialMediaLinks: Joi.alternatives()
+    .try(Joi.object().optional(), Joi.string().optional())
+    .optional(),
+  ticketType: Joi.string().optional(),
+});

@@ -125,113 +125,6 @@ export const getTrendingEvents = async (
   }
 };
 
-export const createEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const { socialMediaLinks } = req.body;
-  const userId = req.user;
-  const user = (await UserInstance.findOne({
-    where: { id: userId },
-  })) as unknown as UserAttribute;
-
-  if (!user) {
-    return res
-      .status(404)
-      .json({ message: "Please log in to create an event" });
-  }
-
-  let galleryUrls: string[] = [];
-  let fileUrl: string | undefined = undefined;
-
-  try {
-    const validateResult = eventValidationSchema.validate(req.body);
-    if (validateResult.error) {
-      return res.status(400).json({
-        Error: validateResult.error.details[0].message,
-      });
-    }
-
-    const { ticketType } = validateResult.value;
-    const ticketTypeArray = JSON.parse(ticketType);
-    const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
-      ...ticket,
-      sold: "0",
-    }));
-
-    const { title, description, date, venue, location, time } =
-      validateResult.value;
-
-    if (req.files && Array.isArray(req.files)) {
-      for (let file of req.files) {
-        const uploadResult = await cloudinary.uploader.upload(file.path);
-        galleryUrls.push(uploadResult.secure_url);
-      }
-    }
-
-    fileUrl = galleryUrls[0];
-
-    if (!fileUrl) {
-      if (galleryUrls.length > 0) {
-        for (const url of galleryUrls) {
-          const publicId = url.split("/").pop()?.split(".")[0];
-          if (publicId) {
-            await cloudinary.uploader.destroy(publicId);
-          }
-        }
-      }
-      return res
-        .status(400)
-        .json({ message: "Please provide an image for the event." });
-    }
-
-    let socialMediaLinksObject: { [key: string]: string } | null = null;
-    if (socialMediaLinks) {
-      try {
-        socialMediaLinksObject = JSON.parse(socialMediaLinks);
-      } catch (error) {
-        return res.status(400).json({
-          message:
-            "Invalid format for social media links. Please send as a JSON object.",
-        });
-      }
-    }
-
-    const newEvent = await EventInstance.create({
-      id: uuidv4(),
-      title,
-      slug: slugify(String(title)).toLowerCase(),
-      description,
-      image: fileUrl,
-      date,
-      time,
-      venue,
-      location,
-      ticketType: updatedTicketTypes,
-      userId,
-      gallery: galleryUrls,
-      socialMediaLinks: socialMediaLinksObject,
-      hostName: user.fullName,
-    });
-
-    return res
-      .status(201)
-      .json({ message: "Event created successfully", event: newEvent });
-  } catch (error: any) {
-    if (galleryUrls.length > 0) {
-      for (const url of galleryUrls) {
-        const publicId = url.split("/").pop()?.split(".")[0];
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId);
-        }
-      }
-    }
-    return res
-      .status(500)
-      .json({ message: "Error creating event", error: error.message });
-  }
-};
-
 export const assignModerator = async (
   req: JwtPayload,
   res: Response
@@ -399,133 +292,6 @@ export const deleteExpiredEvents = async () => {
   }
 };
 
-export const updateEvent = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  const { id } = req.params;
-  const userId = req.user;
-
-  try {
-    const user = await UserInstance.findOne({ where: { id: userId } });
-    if (!user) {
-      return res
-        .status(404)
-        .json({ message: "Please log in to update an event" });
-    }
-
-    const validateResult = updateEventValidationSchema.validate(req.body);
-    if (validateResult.error) {
-      return res.status(400).json({
-        message: "Validation Error",
-        error: validateResult.error.details[0].message,
-      });
-    }
-
-    const {
-      title,
-      description,
-      date,
-      time,
-      venue,
-      location,
-      ticketType,
-      socialMediaLinks,
-    } = validateResult.value;
-
-    const event = await EventInstance.findOne({
-      where: { id, userId },
-    });
-
-    if (!event) {
-      return res
-        .status(404)
-        .json({ message: "Event not found or User not authorized" });
-    }
-
-    const updatedData: any = {};
-
-    if (title) {
-      updatedData.title = title;
-      updatedData.slug = slugify(String(title)).toLowerCase();
-    }
-    if (description) updatedData.description = description;
-    if (date) updatedData.date = date;
-    if (time) updatedData.time = time;
-    if (venue) updatedData.venue = venue;
-    if (location) updatedData.location = location;
-
-    if (ticketType) {
-      try {
-        const ticketTypeArray =
-          typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
-
-        if (Array.isArray(ticketTypeArray)) {
-          updatedData.ticketType = ticketTypeArray;
-        } else {
-          return res.status(400).json({ message: "Invalid ticketType format" });
-        }
-      } catch (error: any) {
-        return res.status(400).json({
-          message: "Failed to parse ticketType",
-          error: error.message,
-        });
-      }
-    }
-
-    if (socialMediaLinks) {
-      try {
-        updatedData.socialMediaLinks =
-          typeof socialMediaLinks === "string"
-            ? JSON.parse(socialMediaLinks)
-            : socialMediaLinks;
-      } catch (error) {
-        return res.status(400).json({
-          message:
-            "Invalid format for socialMediaLinks. Please send as a JSON object.",
-        });
-      }
-    }
-
-    if (req.files && Array.isArray(req.files)) {
-      const existingGallery = event.gallery || [];
-      const newGalleryUrls: string[] = [];
-
-      for (const file of req.files) {
-        const uploadResult = await cloudinary.uploader.upload(file.path);
-
-        newGalleryUrls.push(uploadResult.secure_url);
-      }
-
-      updatedData.gallery = [...existingGallery, ...newGalleryUrls];
-    }
-
-    if (req.file?.path) {
-      const uploadResult = await cloudinary.uploader.upload(req.file.path);
-      updatedData.image = uploadResult.secure_url;
-    }
-
-    if (Object.keys(updatedData).length === 0) {
-      return res.status(400).json({ message: "No valid fields to update" });
-    }
-
-    await EventInstance.update(updatedData, { where: { id } });
-
-    const updatedEvent = await EventInstance.findOne({ where: { id } });
-
-    return res.status(200).json({
-      message: "Event updated successfully",
-      event: updatedEvent,
-    });
-  } catch (error: any) {
-    console.error("Error updating event:", error.message);
-    return res.status(500).json({
-      message: "Error updating event",
-      error: error.message,
-    });
-  }
-};
-
 export const editEventImg = async (
   req: JwtPayload,
   res: Response
@@ -571,5 +337,298 @@ export const editEventImg = async (
     return res
       .status(500)
       .json({ message: "Error fetching events", error: error.message });
+  }
+};
+
+export const createEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { socialMediaLinks } = req.body;
+  const userId = req.user;
+  const user = (await UserInstance.findOne({
+    where: { id: userId },
+  })) as unknown as UserAttribute;
+
+  if (!user) {
+    return res
+      .status(404)
+      .json({ message: "Please log in to create an event" });
+  }
+
+  let galleryUrls: string[] = [];
+  let fileUrl: string | undefined = undefined;
+
+  try {
+    const validateResult = eventValidationSchema.validate(req.body);
+    if (validateResult.error) {
+      return res.status(400).json({
+        Error: validateResult.error.details[0].message,
+      });
+    }
+
+    const {
+      ticketType,
+      title,
+      description,
+      date,
+      venue,
+      location,
+      time,
+      isVirtual,
+      virtualLink,
+      virtualPassword,
+    } = validateResult.value;
+
+    if (isVirtual === true) {
+      if (!virtualLink || virtualLink.trim() === "") {
+        return res.status(400).json({
+          message: "Please provide a valid virtual link for virtual events.",
+        });
+      }
+
+      if (!virtualPassword || virtualPassword.trim() === "") {
+        return res.status(400).json({
+          message: "Please provide a virtual password for virtual events.",
+        });
+      }
+    }
+
+    const ticketTypeArray = JSON.parse(ticketType);
+    const updatedTicketTypes = ticketTypeArray.map((ticket: any) => ({
+      ...ticket,
+      sold: "0",
+    }));
+
+    if (req.files && Array.isArray(req.files)) {
+      for (let file of req.files) {
+        const uploadResult = await cloudinary.uploader.upload(file.path);
+        galleryUrls.push(uploadResult.secure_url);
+      }
+    }
+
+    fileUrl = galleryUrls[0];
+
+    if (!fileUrl) {
+      if (galleryUrls.length > 0) {
+        for (const url of galleryUrls) {
+          const publicId = url.split("/").pop()?.split(".")[0];
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+          }
+        }
+      }
+      return res
+        .status(400)
+        .json({ message: "Please provide an image for the event." });
+    }
+
+    let socialMediaLinksObject: { [key: string]: string } | null = null;
+    if (socialMediaLinks) {
+      try {
+        socialMediaLinksObject = JSON.parse(socialMediaLinks);
+      } catch (error) {
+        return res.status(400).json({
+          message:
+            "Invalid format for social media links. Please send as a JSON object.",
+        });
+      }
+    }
+
+    const newEvent = await EventInstance.create({
+      id: uuidv4(),
+      title,
+      slug: slugify(String(title)).toLowerCase(),
+      description,
+      image: fileUrl,
+      date,
+      time,
+      venue,
+      location,
+      isVirtual,
+      virtualLink,
+      virtualPassword,
+      ticketType: updatedTicketTypes,
+      userId,
+      gallery: galleryUrls,
+      socialMediaLinks: socialMediaLinksObject,
+      hostName: user.fullName,
+    });
+
+    return res
+      .status(201)
+      .json({ message: "Event created successfully", event: newEvent });
+  } catch (error: any) {
+    if (galleryUrls.length > 0) {
+      for (const url of galleryUrls) {
+        const publicId = url.split("/").pop()?.split(".")[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+    }
+    return res
+      .status(500)
+      .json({ message: "Error creating event", error: error.message });
+  }
+};
+
+export const updateEvent = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  const { id } = req.params;
+  const userId = req.user;
+
+  try {
+    const user = await UserInstance.findOne({ where: { id: userId } });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "Please log in to update an event" });
+    }
+
+    const validateResult = updateEventValidationSchema.validate(req.body);
+    if (validateResult.error) {
+      return res.status(400).json({
+        message: "Validation Error",
+        error: validateResult.error.details[0].message,
+      });
+    }
+
+    const {
+      title,
+      description,
+      date,
+      time,
+      venue,
+      location,
+      ticketType,
+      socialMediaLinks,
+      isVirtual,
+      virtualLink,
+      virtualPassword,
+    } = validateResult.value;
+
+    const event = await EventInstance.findOne({
+      where: { id, userId },
+    });
+
+    if (!event) {
+      return res
+        .status(404)
+        .json({ message: "Event not found or User not authorized" });
+    }
+
+    const updatedData: any = {};
+
+    // Basic event info updates
+    if (title) {
+      updatedData.title = title;
+      updatedData.slug = slugify(String(title)).toLowerCase();
+    }
+    if (description) updatedData.description = description;
+    if (date) updatedData.date = date;
+    if (time) updatedData.time = time;
+    if (venue) updatedData.venue = venue;
+    if (location) updatedData.location = location;
+
+    // Virtual event updates
+    if (isVirtual !== undefined) {
+      updatedData.isVirtual = isVirtual;
+
+      if (isVirtual === true) {
+        if (!virtualLink || virtualLink.trim() === "") {
+          return res.status(400).json({
+            message: "Please provide a valid virtual link for virtual events.",
+          });
+        }
+        if (!virtualPassword || virtualPassword.trim() === "") {
+          return res.status(400).json({
+            message: "Please provide a virtual password for virtual events.",
+          });
+        }
+        updatedData.virtualLink = virtualLink;
+        updatedData.virtualPassword = virtualPassword;
+      } else {
+        updatedData.virtualLink = null;
+        updatedData.virtualPassword = null;
+      }
+    } else if (event.isVirtual) {
+      if (!event.virtualLink || !event.virtualPassword) {
+        return res.status(400).json({
+          message:
+            "Virtual events require both virtualLink and virtualPassword.",
+        });
+      }
+    }
+
+    if (ticketType) {
+      try {
+        const ticketTypeArray =
+          typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
+
+        if (Array.isArray(ticketTypeArray)) {
+          updatedData.ticketType = ticketTypeArray;
+        } else {
+          return res.status(400).json({ message: "Invalid ticketType format" });
+        }
+      } catch (error: any) {
+        return res.status(400).json({
+          message: "Failed to parse ticketType",
+          error: error.message,
+        });
+      }
+    }
+
+    if (socialMediaLinks) {
+      try {
+        updatedData.socialMediaLinks =
+          typeof socialMediaLinks === "string"
+            ? JSON.parse(socialMediaLinks)
+            : socialMediaLinks;
+      } catch (error) {
+        return res.status(400).json({
+          message:
+            "Invalid format for socialMediaLinks. Please send as a JSON object.",
+        });
+      }
+    }
+
+    if (req.files && Array.isArray(req.files)) {
+      const existingGallery = event.gallery || [];
+      const newGalleryUrls: string[] = [];
+
+      for (const file of req.files) {
+        const uploadResult = await cloudinary.uploader.upload(file.path);
+        newGalleryUrls.push(uploadResult.secure_url);
+      }
+
+      updatedData.gallery = [...existingGallery, ...newGalleryUrls];
+    }
+
+    if (req.file?.path) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path);
+      updatedData.image = uploadResult.secure_url;
+    }
+
+    if (Object.keys(updatedData).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update" });
+    }
+
+    await EventInstance.update(updatedData, { where: { id } });
+
+    const updatedEvent = await EventInstance.findOne({ where: { id } });
+
+    return res.status(200).json({
+      message: "Event updated successfully",
+      event: updatedEvent,
+    });
+  } catch (error: any) {
+    console.error("Error updating event:", error.message);
+    return res.status(500).json({
+      message: "Error updating event",
+      error: error.message,
+    });
   }
 };

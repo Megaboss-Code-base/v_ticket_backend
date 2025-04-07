@@ -40,7 +40,9 @@ export const sendTicketEmail = async (
   event: any,
   ticket: any,
   totalAmount: number,
-  currency: string
+  currency: string,
+  ticketPrice?: number,
+  // virtualLink?: string
 ): Promise<void> => {
   try {
     // Generate calendar links
@@ -105,9 +107,22 @@ export const sendTicketEmail = async (
             }
           </li>
           <li style="margin-bottom: 12px; font-size: 16px; color: #555;">
-            <strong style="color: #2c3e50; display: inline-block; width: 100px;">Price:</strong> ${currency} ${totalAmount.toFixed(
+            <strong style="color: #2c3e50; display: inline-block; width: 100px;">Virtual Link:</strong> ${
+              event.virtualLink
+            }
+          </li>
+          <li style="margin-bottom: 12px; font-size: 16px; color: #555;">
+            <strong style="color: #2c3e50; display: inline-block; width: 100px;">Virtual Password:</strong> ${
+              event.virtualPassword
+            }
+          </li>
+          <li style="margin-bottom: 12px; font-size: 16px; color: #555;">
+            <strong style="color: #2c3e50; display: inline-block; width: 100px;">Amount Paid:</strong> ${currency} ${totalAmount.toFixed(
       2
     )}
+          </li>
+          <li style="margin-bottom: 12px; font-size: 16px; color: #555;">
+            <strong style="color: #2c3e50; display: inline-block; width: 100px;">Ticket Price:</strong> ${currency} ${ticketPrice}
           </li>
           <li style="margin-bottom: 12px; font-size: 16px; color: #555;">
             <strong style="color: #2c3e50; display: inline-block; width: 100px;">Date:</strong> ${new Date(
@@ -187,3 +202,131 @@ export const sendTicketEmail = async (
     throw err;
   }
 };
+
+// import { Request, Response } from "express";
+// import axios from "axios";
+// import { TicketInstance } from "../models/ticketModel";
+// import { v4 as uuidv4 } from "uuid";
+// import {
+//   ACCOUNT_OWNER_ID,
+//   db,
+//   FLUTTERWAVE_BASE_URL,
+//   FLUTTERWAVE_HASH_SECRET,
+//   FLUTTERWAVE_PUBLIC_KEY,
+//   FLUTTERWAVE_SECRET_KEY,
+//   FRONTEND_URL,
+//   generateTicketSignature,
+//   PAYSTACK_BASE_URL,
+//   PAYSTACK_SECRET_KEY,
+// } from "../config";
+// import TransactionInstance from "../models/transactionModel";
+// import EventInstance from "../models/eventModel";
+// import { UserAttribute, UserInstance } from "../models/userModel";
+// import QRCode from "qrcode";
+// import { v2 as cloudinary } from "cloudinary";
+// import { uploadICSFileToCloudinary } from "./multer";
+// import sendEmail from "./sendMail";
+
+// cloudinary.config({
+//   cloudinary_url: process.env.CLOUDINARY_URL,
+// });
+
+// // Function to generate Google Calendar link
+// const generateGoogleCalendarLink = (event: any): string => {
+//   const startDate = new Date(event.date).toISOString().replace(/[-:.]/g, "");
+//   const endDate = startDate; // Assuming it's a one-day event
+//   return `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+//     event.title
+//   )}&dates=${startDate}/${endDate}&details=${encodeURIComponent(
+//     event.description || ""
+//   )}&location=${encodeURIComponent(event.location || "")}&sf=true&output=xml`;
+// };
+
+// // Function to generate ICS content
+// const generateICS = (event: any): string => {
+//   const formatDateForICS = (date: Date) =>
+//     date
+//       .toISOString()
+//       .replace(/[-:]/g, "")
+//       .replace(/\.\d{3}Z$/, "");
+
+//   const startDate = formatDateForICS(new Date(event.date));
+//   const endDate = formatDateForICS(new Date(event.date)); // Update if multi-day
+
+//   return `BEGIN:VCALENDAR
+//           VERSION:2.0
+//           BEGIN:VEVENT
+//           SUMMARY:${event.title}
+//           DESCRIPTION:${event.description || ""}
+//           DTSTART:${startDate}
+//           DTEND:${endDate}
+//           LOCATION:${event.location || ""}
+//           END:VEVENT
+//           END:VCALENDAR`;
+// };
+
+// export const sendTicketEmail = async (
+//   recipients: { name: string; email: string }[],
+//   event: any,
+//   ticket: any,
+//   totalAmount: number,
+//   currency: string
+// ): Promise<void> => {
+//   try {
+//     const googleCalendarLink = generateGoogleCalendarLink(event);
+//     const icsContent = generateICS(event);
+//     const icsUrl = await uploadICSFileToCloudinary(
+//       `event-${event.id}.ics`,
+//       icsContent
+//     );
+
+//     // Construct email message for each recipient
+//     for (const recipient of recipients) {
+//       const mailMessage = `
+//         <div style="font-family: 'Georgia', serif; line-height: 1.8; color: #444; background-color: #fafafa; padding: 40px;">
+//           <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); border: 1px solid #eee;">
+//             <h1 style="font-size: 28px; color: #2c3e50; margin-bottom: 24px; font-weight: 600; text-align: center;">
+//               Thank You, ${recipient.name}!
+//             </h1>
+//             <p style="margin: 16px 0; font-size: 16px; color: #555; text-align: center;">
+//               We’re thrilled to welcome you to <strong>${event.title}</strong>. Below are the details of your ticket.
+//             </p>
+//             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
+//               <h2 style="font-size: 22px; color: #2c3e50; margin-bottom: 16px; font-weight: 500; text-align: center;">
+//                 Event Details
+//               </h2>
+//               <ul style="margin: 0; padding: 0; list-style: none;">
+//                 <li><strong>Event:</strong> ${event.title}</li>
+//                 <li><strong>Ticket Type:</strong> ${ticket.ticketType}</li>
+//                 <li><strong>Amount Paid:</strong> ${currency} ${totalAmount.toFixed(2)}</li>
+//                 <li><strong>Date:</strong> ${new Date(event.date).toLocaleDateString()}</li>
+//                 ${event.location ? `<li><strong>Location:</strong> ${event.location}</li>` : ""}
+//               </ul>
+//             </div>
+//             <div style="text-align: center;">
+//               <p style="margin: 16px 0; font-size: 18px; color: #2c3e50; font-weight: 500;">
+//                 Your QR Code
+//               </p>
+//               <img src="${ticket.qrCode}" style="max-width: 200px;">
+//             </div>
+//             <p style="text-align: center;">
+//               <a href="${googleCalendarLink}">Add to Google Calendar</a>
+//               <br>
+//               <a href="${icsUrl}">Download ICS File</a>
+//             </p>
+//           </div>
+//         </div>
+//       `;
+
+//       // Send email logic here (e.g., using nodemailer)
+//       await sendEmail({
+//         email: recipient.email,
+//         subject: `Your Ticket for "${event.title}"`,
+//         message: mailMessage,
+//       });
+//     }
+//   } catch (err: any) {
+//     console.error("Error sending ticket email:", err.message);
+//     throw err;
+//   }
+// };

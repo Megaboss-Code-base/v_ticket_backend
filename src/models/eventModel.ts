@@ -22,6 +22,13 @@ export interface SocialMediaLinks {
   twitter?: string;
   [key: string]: string | undefined;
 }
+export interface VirtualDetails {
+  platform?: string;
+  meetingUrl?: string;
+  meetingId?: string;
+  passcode?: string;
+  [key: string]: string | undefined;
+}
 
 export class EventInstance extends Model<
   InferAttributes<EventInstance>,
@@ -42,8 +49,7 @@ export class EventInstance extends Model<
   declare hostName: string;
   declare userId: string;
   declare isVirtual: boolean | null;
-  declare virtualLink: string | null;
-  declare virtualPassword: string | null;
+  declare virtualEventDetails: VirtualDetails | null;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -136,12 +142,8 @@ EventInstance.init(
       allowNull: true,
       defaultValue: false,
     },
-    virtualLink: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    virtualPassword: {
-      type: DataTypes.STRING,
+    virtualEventDetails: {
+      type: DataTypes.JSONB,
       allowNull: true,
     },
     createdAt: {

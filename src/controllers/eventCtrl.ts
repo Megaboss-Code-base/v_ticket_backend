@@ -376,20 +376,17 @@ export const createEvent = async (
       location,
       time,
       isVirtual,
-      virtualLink,
-      virtualPassword,
+      virtualEventDetails,
     } = validateResult.value;
 
+    let virtualDetailsObject: { [key: string]: string } | null = null;
     if (isVirtual === true) {
-      if (!virtualLink || virtualLink.trim() === "") {
+      try {
+        virtualDetailsObject = JSON.parse(virtualEventDetails);
+      } catch (error) {
         return res.status(400).json({
-          message: "Please provide a valid virtual link for virtual events.",
-        });
-      }
-
-      if (!virtualPassword || virtualPassword.trim() === "") {
-        return res.status(400).json({
-          message: "Please provide a virtual password for virtual events.",
+          message:
+            "Invalid format for virtual event details. Please send as a JSON object.",
         });
       }
     }
@@ -446,8 +443,7 @@ export const createEvent = async (
       venue,
       location,
       isVirtual,
-      virtualLink,
-      virtualPassword,
+      virtualEventDetails: virtualDetailsObject,
       ticketType: updatedTicketTypes,
       userId,
       gallery: galleryUrls,
@@ -479,6 +475,7 @@ export const updateEvent = async (
 ): Promise<any> => {
   const { id } = req.params;
   const userId = req.user;
+  let newGalleryUrls: string[] = [];
 
   try {
     const user = await UserInstance.findOne({ where: { id: userId } });
@@ -491,8 +488,7 @@ export const updateEvent = async (
     const validateResult = updateEventValidationSchema.validate(req.body);
     if (validateResult.error) {
       return res.status(400).json({
-        message: "Validation Error",
-        error: validateResult.error.details[0].message,
+        Error: validateResult.error.details[0].message,
       });
     }
 
@@ -506,8 +502,7 @@ export const updateEvent = async (
       ticketType,
       socialMediaLinks,
       isVirtual,
-      virtualLink,
-      virtualPassword,
+      virtualEventDetails,
     } = validateResult.value;
 
     const event = await EventInstance.findOne({
@@ -522,7 +517,6 @@ export const updateEvent = async (
 
     const updatedData: any = {};
 
-    // Basic event info updates
     if (title) {
       updatedData.title = title;
       updatedData.slug = slugify(String(title)).toLowerCase();
@@ -533,33 +527,22 @@ export const updateEvent = async (
     if (venue) updatedData.venue = venue;
     if (location) updatedData.location = location;
 
-    // Virtual event updates
     if (isVirtual !== undefined) {
       updatedData.isVirtual = isVirtual;
 
       if (isVirtual === true) {
-        if (!virtualLink || virtualLink.trim() === "") {
+        let virtualDetailsObject: { [key: string]: string } | null = null;
+        try {
+          virtualDetailsObject = JSON.parse(virtualEventDetails);
+        } catch (error) {
           return res.status(400).json({
-            message: "Please provide a valid virtual link for virtual events.",
+            message:
+              "Invalid format for virtual event details. Please send as a JSON object.",
           });
         }
-        if (!virtualPassword || virtualPassword.trim() === "") {
-          return res.status(400).json({
-            message: "Please provide a virtual password for virtual events.",
-          });
-        }
-        updatedData.virtualLink = virtualLink;
-        updatedData.virtualPassword = virtualPassword;
+        updatedData.virtualEventDetails = virtualDetailsObject;
       } else {
-        updatedData.virtualLink = null;
-        updatedData.virtualPassword = null;
-      }
-    } else if (event.isVirtual) {
-      if (!event.virtualLink || !event.virtualPassword) {
-        return res.status(400).json({
-          message:
-            "Virtual events require both virtualLink and virtualPassword.",
-        });
+        updatedData.virtualEventDetails = null;
       }
     }
 
@@ -567,15 +550,10 @@ export const updateEvent = async (
       try {
         const ticketTypeArray =
           typeof ticketType === "string" ? JSON.parse(ticketType) : ticketType;
-
-        if (Array.isArray(ticketTypeArray)) {
-          updatedData.ticketType = ticketTypeArray;
-        } else {
-          return res.status(400).json({ message: "Invalid ticketType format" });
-        }
+        updatedData.ticketType = ticketTypeArray;
       } catch (error: any) {
         return res.status(400).json({
-          message: "Failed to parse ticketType",
+          message: "Invalid ticketType format",
           error: error.message,
         });
       }
@@ -590,20 +568,17 @@ export const updateEvent = async (
       } catch (error) {
         return res.status(400).json({
           message:
-            "Invalid format for socialMediaLinks. Please send as a JSON object.",
+            "Invalid format for social media links. Please send as a JSON object.",
         });
       }
     }
 
     if (req.files && Array.isArray(req.files)) {
       const existingGallery = event.gallery || [];
-      const newGalleryUrls: string[] = [];
-
       for (const file of req.files) {
         const uploadResult = await cloudinary.uploader.upload(file.path);
         newGalleryUrls.push(uploadResult.secure_url);
       }
-
       updatedData.gallery = [...existingGallery, ...newGalleryUrls];
     }
 
@@ -625,7 +600,14 @@ export const updateEvent = async (
       event: updatedEvent,
     });
   } catch (error: any) {
-    console.error("Error updating event:", error.message);
+    if (newGalleryUrls.length > 0) {
+      for (const url of newGalleryUrls) {
+        const publicId = url.split("/").pop()?.split(".")[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+      }
+    }
     return res.status(500).json({
       message: "Error updating event",
       error: error.message,

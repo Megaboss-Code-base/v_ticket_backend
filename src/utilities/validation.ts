@@ -55,6 +55,47 @@ export const validate = <T>(
   return { value };
 };
 
+export const updateEventValidationSchema = Joi.object({
+  title: Joi.string().optional(),
+  description: Joi.string().optional(),
+  date: Joi.date().optional(),
+  location: Joi.string().optional(),
+  time: Joi.string().optional(),
+  venue: Joi.string().optional(),
+  image: Joi.string().optional(),
+  gallery: Joi.array().items(Joi.string()).optional(),
+  ticketType: Joi.alternatives().try(
+    Joi.array().items(
+      Joi.object({
+        name: Joi.string().required(),
+        price: Joi.number().required(),
+        quantity: Joi.number().required(),
+        sold: Joi.number().optional()
+      })
+    ),
+    Joi.string().optional()
+  ),
+  socialMediaLinks: Joi.alternatives().try(
+    Joi.object().optional(),
+    Joi.string().optional()
+  ),
+  isVirtual: Joi.boolean().optional(),
+  virtualEventDetails: Joi.alternatives().conditional('isVirtual', {
+    is: true,
+    then: Joi.alternatives().try(
+      Joi.object({
+        platform: Joi.string().required(),
+        meetingUrl: Joi.string().uri().required(),
+        meetingId: Joi.string().required(),
+        passcode: Joi.string().required()
+      }).required(),
+      Joi.string().required()
+    ),
+    otherwise: Joi.forbidden()
+  })
+});
+
+
 export const eventValidationSchema = Joi.object({
   title: Joi.string().required(),
   description: Joi.string().required(),
@@ -68,36 +109,12 @@ export const eventValidationSchema = Joi.object({
     Joi.string().optional()
   ),
   isVirtual: Joi.boolean().required(),
-  virtualLink: Joi.string()
-    .uri()
-    .when("isVirtual", {
-      is: true,
-      then: Joi.required().messages({
-        "any.required": "Virtual link is required when event is virtual",
-        "string.uri": "Virtual link must be a valid URL",
-      }),
-      otherwise: Joi.optional(),
-    }),
-  virtualPassword: Joi.string().when("isVirtual", {
+  virtualEventDetails: Joi.alternatives().conditional('isVirtual', {
     is: true,
-    then: Joi.required().messages({
-      "any.required": "Virtual password is required when event is virtual",
-    }),
-    otherwise: Joi.optional(),
+    then: Joi.alternatives().try(
+      Joi.object().required(),
+      Joi.string().required()
+    ),
+    otherwise: Joi.forbidden() 
   }),
-});
-
-export const updateEventValidationSchema = Joi.object({
-  title: Joi.string().optional(),
-  description: Joi.string().optional(),
-  date: Joi.date().optional(),
-  location: Joi.string().optional(),
-  time: Joi.string().optional(),
-  venue: Joi.string().optional(),
-  image: Joi.string().optional(),
-  gallery: Joi.array().items(Joi.string()).optional(),
-  socialMediaLinks: Joi.alternatives()
-    .try(Joi.object().optional(), Joi.string().optional())
-    .optional(),
-  ticketType: Joi.string().optional(),
 });

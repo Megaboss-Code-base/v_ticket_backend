@@ -27,8 +27,13 @@ export interface VirtualDetails {
   meetingUrl?: string;
   meetingId?: string;
   passcode?: string;
-  [key: string]: string | undefined;
+  requiresPassword?: boolean;
+  virtualPassword?: string;
+  enableWaitingRoom?: boolean;
+  lockRoom?: boolean;
+  [key: string]: string | boolean | undefined;
 }
+
 
 export class EventInstance extends Model<
   InferAttributes<EventInstance>,

@@ -11,6 +11,7 @@ import { Sequelize } from "sequelize";
 import {
   db,
   EXPIRESIN,
+  FRONTEND_URL,
   generateRandomAlphaNumeric,
   JWT_SECRET,
   REFRESH_EXPIRESIN,
@@ -82,7 +83,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         country: "",
         userValidationSecret,
         otpVerificationExpiry,
-        isVerified: true,
+        isVerified: false,
         totalEarnings: 0,
       },
       { transaction }
@@ -94,23 +95,21 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       ...userWithoutSensitiveData
     } = user.get({ plain: true });
 
-    const resetUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/auth/verify-otp/${userValidationSecret}`;
+    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${userValidationSecret}`;
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 
     await sendEmail({
       email: newEmail,
       subject: "Register Successfully",
-      message: `You are receiving this email because you (or someone else) has registered with this ${newEmail} address.`,
+      message,
     });
 
     await transaction.commit();
 
     return res.status(201).json({
-      message: "User created successfully.",
-      // "User created successfully. Please check your email to verify your account.",
+      message:
+        "User created successfully. Please check your email to verify your account.",
       user: userWithoutSensitiveData,
     });
   } catch (error: any) {
@@ -158,6 +157,12 @@ export const verifyOTP = async (req: Request, res: Response): Promise<any> => {
       },
       { where: { email: user.email } }
     );
+
+    await sendEmail({
+      email: newEmail,
+      subject: "Register Successfully",
+      message: `Account verified successfully`,
+    });
 
     return res.status(200).json({ message: "Account verified successfully" });
   } catch (error: any) {
@@ -208,17 +213,15 @@ export const resendVerificationOTP = async (
       { where: { email: user.email } }
     );
 
-    const resetUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/auth/verify-otp/${userValidationSecret}`;
+    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${userValidationSecret}`;
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 
-    // await sendEmail({
-    //   email: newEmail,
-    //   subject: "Verify Your Account",
-    //   message,
-    // });
+    await sendEmail({
+      email: newEmail,
+      subject: "Verify Your Account",
+      message,
+    });
 
     return res.status(200).json({
       message:
@@ -381,22 +384,20 @@ export const passwordRecovery = async (
     );
 
     if (updatedPassword) {
-      const resetUrl = `${req.protocol}://${req.get(
-        "host"
-      )}/auth/resetpassword/${userPassword}`;
+      // const resetUrl = `${FRONTEND_URL}/auth/resetpassword/${userPassword}`;
 
-      const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PATCH request to: \n\n ${resetUrl}`;
+      const message = `You are receiving this email because you (or someone else) has requested the reset of your password. Here is your new password ${resetPassword}. You can reset when yo login`;
 
       try {
-        // await sendEmail({
-        //   email: user.email,
-        //   subject: "Password reset token",
-        //   message,
-        // });
+        await sendEmail({
+          email: user.email,
+          subject: "Password reset token",
+          message,
+        });
 
         return res
           .status(200)
-          .json({ success: true, data: "Email sent", password: resetPassword });
+          .json({ success: true, data: "Email sent" });
       } catch (err: any) {
         return res
           .status(500)

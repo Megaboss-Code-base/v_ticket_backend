@@ -224,12 +224,23 @@ export const sendTicketEmail = async (
       </div>
     `;
 
+    try {
+      await sendEmail({
+        email,
+        subject: `Your Ticket for "${event.title}"`,
+        message: mailMessage,
+      });
+    } catch (err:any) {
+      console.error("Error sending email from email service:", err.message);
+
+    }
+
     // Send the email
-    await sendEmail({
-      email,
-      subject: `Your Ticket for "${event.title}"`,
-      message: mailMessage,
-    });
+    // await sendEmail({
+    //   email,
+    //   subject: `Your Ticket for "${event.title}"`,
+    //   message: mailMessage,
+    // });
   } catch (err: any) {
     console.error("Error sending ticket email:", err.message);
     throw err;

@@ -98,7 +98,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       ...userWithoutSensitiveData
     } = user.get({ plain: true });
 
-    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${userValidationSecret}`;
+    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${newEmail}/${userValidationSecret}`;
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 
@@ -216,7 +216,7 @@ export const resendVerificationOTP = async (
       { where: { email: user.email } }
     );
 
-    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${userValidationSecret}`;
+    const resetUrl = `${FRONTEND_URL}/auth/verify-otp/${newEmail}/${userValidationSecret}`;
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 

@@ -34,6 +34,12 @@ export const userRegistrationSchema = Joi.object({
   timezone: Joi.string().allow(null).optional().messages({
     "string.empty": "Timezone cannot be empty",
   }),
+  country: Joi.string().allow(null).optional().messages({
+    "string.empty": "Country cannot be empty",
+  }),
+  currency: Joi.string().allow(null).optional().messages({
+    "string.empty": "Currency cannot be empty",
+  }),
 });
 
 export const validate = <T>(
@@ -70,7 +76,7 @@ export const updateEventValidationSchema = Joi.object({
         name: Joi.string().required(),
         price: Joi.number().required(),
         quantity: Joi.number().required(),
-        sold: Joi.number().optional()
+        sold: Joi.number().optional(),
       })
     ),
     Joi.string().optional()
@@ -80,21 +86,20 @@ export const updateEventValidationSchema = Joi.object({
     Joi.string().optional()
   ),
   isVirtual: Joi.boolean().optional(),
-  virtualEventDetails: Joi.alternatives().conditional('isVirtual', {
+  virtualEventDetails: Joi.alternatives().conditional("isVirtual", {
     is: true,
     then: Joi.alternatives().try(
       Joi.object({
         platform: Joi.string().required(),
         meetingUrl: Joi.string().uri().required(),
         meetingId: Joi.string().required(),
-        passcode: Joi.string().required()
+        passcode: Joi.string().required(),
       }).required(),
       Joi.string().required()
     ),
-    otherwise: Joi.forbidden()
-  })
+    otherwise: Joi.forbidden(),
+  }),
 });
-
 
 export const eventValidationSchema = Joi.object({
   title: Joi.string().required(),
@@ -109,12 +114,12 @@ export const eventValidationSchema = Joi.object({
     Joi.string().optional()
   ),
   isVirtual: Joi.boolean().required(),
-  virtualEventDetails: Joi.alternatives().conditional('isVirtual', {
+  virtualEventDetails: Joi.alternatives().conditional("isVirtual", {
     is: true,
     then: Joi.alternatives().try(
       Joi.object().required(),
       Joi.string().required()
     ),
-    otherwise: Joi.forbidden() 
+    otherwise: Joi.forbidden(),
   }),
 });

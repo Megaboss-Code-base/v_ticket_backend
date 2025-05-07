@@ -33,6 +33,8 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       companyWebsite,
       address,
       timezone,
+      country,
+      currency,
     } = req.body;
 
     const validateResult = userRegistrationSchema.validate(req.body);
@@ -80,7 +82,8 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         companyWebsite,
         address,
         timezone,
-        country: "",
+        country: country || "",
+        currency: currency || "",
         userValidationSecret,
         otpVerificationExpiry,
         isVerified: false,
@@ -395,9 +398,7 @@ export const passwordRecovery = async (
           message,
         });
 
-        return res
-          .status(200)
-          .json({ success: true, data: "Email sent" });
+        return res.status(200).json({ success: true, data: "Email sent" });
       } catch (err: any) {
         return res
           .status(500)

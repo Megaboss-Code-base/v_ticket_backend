@@ -18,8 +18,11 @@ export interface UserAttribute {
   isVerified: boolean;
   userValidationSecret: string | null;
   otpVerificationExpiry: Date | null;
+  account_name: string | null;
+  account_code: string | null;
   account_bank: string | null;
   account_number: string | null;
+  account_country: string | null;
   totalEarnings: number;
 }
 
@@ -93,6 +96,18 @@ UserInstance.init(
     },
     otpVerificationExpiry: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    account_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    account_code: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    account_country: {
+      type: DataTypes.STRING,
       allowNull: true,
     },
     account_bank: {

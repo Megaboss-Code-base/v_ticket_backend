@@ -7,6 +7,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import dayjs, { ManipulateType } from "dayjs";
 import { Sequelize } from "sequelize";
+import axios from "axios";
 
 import {
   db,
@@ -14,6 +15,8 @@ import {
   FRONTEND_URL,
   generateRandomAlphaNumeric,
   JWT_SECRET,
+  PAYSTACK_BASE_URL,
+  PAYSTACK_SECRET_KEY,
   REFRESH_EXPIRESIN,
   resetPasswordExpireMinutes,
   resetPasswordExpireUnit,
@@ -253,6 +256,7 @@ export const login = async (req: Request, res: Response): Promise<any> => {
     const user = (await UserInstance.findOne({
       where: { email: newEmail },
     })) as unknown as UserAttribute;
+
     if (!user) {
       return res.status(400).json({
         Error: "Invalid credentials",
@@ -292,10 +296,47 @@ export const login = async (req: Request, res: Response): Promise<any> => {
       refreshToken,
       user,
     });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({
-      Error: "Internal server error",
+      Error: `Internal server error: ${error.message}`,
       route: "users/login",
+    });
+  }
+};
+
+export const getProfile = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+
+    const user = await UserInstance.findOne({
+      where: { id: userId },
+      attributes: {
+        exclude: [
+          "password",
+          "userValidationSecret",
+          "otpVerificationExpiry",
+          "updatedAt",
+          "createdAt",
+          "id",
+        ],
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User profile fetched successfully",
+      user,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/get-profile",
     });
   }
 };
@@ -413,109 +454,72 @@ export const passwordRecovery = async (
   }
 };
 
-export const getProfile = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  try {
-    const userId = req.user;
+// export const updateProfile = async (
+//   req: JwtPayload,
+//   res: Response
+// ): Promise<any> => {
+//   try {
+//     const userId = req.user;
+//     const {
+//       fullName,
+//       phone,
+//       profilePic,
+//       businessName,
+//       companyWebsite,
+//       address,
+//       country,
+//       timezone,
+//       account_bank,
+//       account_number,
+//     } = req.body;
 
-    const user = await UserInstance.findOne({
-      where: { id: userId },
-      attributes: {
-        exclude: [
-          "password",
-          "userValidationSecret",
-          "otpVerificationExpiry",
-          "updatedAt",
-          "createdAt",
-          "id",
-        ],
-      },
-    });
+//     const user = await UserInstance.findOne({
+//       where: { id: userId },
+//       attributes: {
+//         exclude: [
+//           "password",
+//           "userValidationSecret",
+//           "otpVerificationExpiry",
+//           "updatedAt",
+//           "createdAt",
+//           "id",
+//         ],
+//       },
+//     });
 
-    if (!user) {
-      return res.status(404).json({ Error: "User not found" });
-    }
+//     if (!user) {
+//       return res.status(404).json({ Error: "User not found" });
+//     }
 
-    return res.status(200).json({
-      message: "User profile fetched successfully",
-      user,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      Error: `Internal server error: ${error.message}`,
-      route: "users/get-profile",
-    });
-  }
-};
+//     const updateFields: any = {};
 
-export const updateProfile = async (
-  req: JwtPayload,
-  res: Response
-): Promise<any> => {
-  try {
-    const userId = req.user;
-    const {
-      fullName,
-      phone,
-      profilePic,
-      businessName,
-      companyWebsite,
-      address,
-      country,
-      timezone,
-      account_bank,
-      account_number,
-    } = req.body;
+//     if (fullName) updateFields.fullName = fullName;
+//     if (phone) updateFields.phone = phone;
+//     if (profilePic) updateFields.profilePic = profilePic;
+//     if (businessName) updateFields.businessName = businessName;
+//     if (companyWebsite) updateFields.companyWebsite = companyWebsite;
+//     if (address) updateFields.address = address;
+//     if (timezone) updateFields.timezone = timezone;
+//     if (country) updateFields.country = country;
+//     if (account_bank) updateFields.account_bank = account_bank;
+//     if (account_number) updateFields.account_number = account_number;
 
-    const user = await UserInstance.findOne({
-      where: { id: userId },
-      attributes: {
-        exclude: [
-          "password",
-          "userValidationSecret",
-          "otpVerificationExpiry",
-          "updatedAt",
-          "createdAt",
-          "id",
-        ],
-      },
-    });
+//     if (Object.keys(updateFields).length === 0) {
+//       return res.status(400).json({ Error: "No valid fields to update" });
+//     }
 
-    if (!user) {
-      return res.status(404).json({ Error: "User not found" });
-    }
+//     await UserInstance.update(updateFields, { where: { id: userId } });
 
-    const updateFields: any = {};
-
-    if (fullName) updateFields.fullName = fullName;
-    if (phone) updateFields.phone = phone;
-    if (profilePic) updateFields.profilePic = profilePic;
-    if (businessName) updateFields.businessName = businessName;
-    if (companyWebsite) updateFields.companyWebsite = companyWebsite;
-    if (address) updateFields.address = address;
-    if (timezone) updateFields.timezone = timezone;
-    if (country) updateFields.country = country;
-    if (account_bank) updateFields.account_bank = account_bank;
-    if (account_number) updateFields.account_number = account_number;
-
-    if (Object.keys(updateFields).length === 0) {
-      return res.status(400).json({ Error: "No valid fields to update" });
-    }
-
-    await UserInstance.update(updateFields, { where: { id: userId } });
-
-    return res.status(200).json({
-      message: "Profile updated successfully",
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      Error: `Internal server error: ${error.message}`,
-      route: "users/update-profile",
-    });
-  }
-};
+//     return res.status(200).json({
+//       message: "Profile updated successfully",
+//     });
+//   } catch (error: any) {
+//     res.status(500).json({
+//       Error: `Internal server error: ${error.message}`,
+//       route: "users/update-profile",
+//     });
+//   }
+// };
 
 export const uploadPicture = async (
   req: JwtPayload,
@@ -599,5 +603,147 @@ export const allUsers = async (req: Request, res: Response): Promise<any> => {
   } catch (error: any) {
     console.error("Error fetching monthly registrations:", error.message);
     return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const updateProfile = async (
+  req: JwtPayload,
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+    const {
+      fullName,
+      phone,
+      profilePic,
+      businessName,
+      companyWebsite,
+      address,
+      country,
+      timezone,
+    } = req.body;
+
+    const user = await UserInstance.findOne({
+      where: { id: userId },
+      attributes: {
+        exclude: [
+          "password",
+          "userValidationSecret",
+          "otpVerificationExpiry",
+          "updatedAt",
+          "createdAt",
+          "id",
+        ],
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ Error: "User not found" });
+    }
+
+    const updateFields: any = {};
+
+    if (fullName) updateFields.fullName = fullName;
+    if (phone) updateFields.phone = phone;
+    if (profilePic) updateFields.profilePic = profilePic;
+    if (businessName) updateFields.businessName = businessName;
+    if (companyWebsite) updateFields.companyWebsite = companyWebsite;
+    if (address) updateFields.address = address;
+    if (timezone) updateFields.timezone = timezone;
+    if (country) updateFields.country = country;
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ Error: "No valid fields to update" });
+    }
+
+    await UserInstance.update(updateFields, { where: { id: userId } });
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      Error: `Internal server error: ${error.message}`,
+      route: "users/update-profile",
+    });
+  }
+};
+
+export const getBanks = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { country = "nigeria" } = req.query;
+
+    const response = await axios.get(`${PAYSTACK_BASE_URL}/bank`, {
+      params: { country },
+      headers: {
+        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Banks retrieved successfully",
+      banks: response.data.data,
+    });
+  } catch (error: any) {
+    console.error("Fetch banks error:", error);
+    return res.status(400).json({
+      Error: "Failed to fetch banks",
+      details: error.response?.data?.message || error.message,
+    });
+  }
+};
+
+export const verifyBankAccount = async (
+  req: Request & { user?: { id: string } },
+  res: Response
+): Promise<any> => {
+  try {
+    const userId = req.user;
+    const {
+      bank_code,
+      account_bank,
+      account_number,
+      country = "nigeria",
+    } = req.body;
+
+    if (!bank_code || !account_number || !account_bank || !country) {
+      return res.status(400).json({
+        Error:
+          "All these are required: bank_code,account_number,bank account and country",
+      });
+    }
+
+    const response = await axios.get(
+      `${PAYSTACK_BASE_URL}/bank/resolve?account_number=${account_number}&bank_code=${bank_code}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        },
+      }
+    );
+
+    const account_name = response.data.data.account_name;
+
+    await UserInstance.update(
+      {
+        account_bank,
+        account_code: bank_code,
+        account_number,
+        account_name,
+        account_country: country,
+      },
+      { where: { id: userId } }
+    );
+
+    return res.status(200).json({
+      message: "Bank account verified successfully",
+      account_name,
+    });
+  } catch (error: any) {
+    console.error("Bank verification error:", error);
+    return res.status(400).json({
+      Error: "Bank account verification failed",
+      details: error.response?.data?.message || "Invalid bank details",
+    });
   }
 };

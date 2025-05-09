@@ -4,3 +4,4 @@ yarn.lock
 dist
 note.md
 deploy.env
+KeptFolder

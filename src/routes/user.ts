@@ -2,6 +2,7 @@ import express from "express";
 import {
   allUsers,
   changePassword,
+  getBanks,
   getMonthlyRegistrations,
   getProfile,
   login,
@@ -10,6 +11,7 @@ import {
   resendVerificationOTP,
   updateProfile,
   uploadPicture,
+  verifyBankAccount,
   verifyOTP,
 } from "../controllers/userCtrl";
 import { adminAuth, auth } from "../middlewares/auth";
@@ -21,6 +23,10 @@ userRouter.post("/register", register);
 userRouter.post("/verify-otp", verifyOTP);
 userRouter.post("/resend-otp", resendVerificationOTP);
 userRouter.post("/login", login);
+
+userRouter.get("/banks", getBanks);
+userRouter.post("/verify-account", auth, verifyBankAccount);
+
 userRouter.patch("/change-password", auth, changePassword);
 userRouter.patch("/password-recovery", passwordRecovery);
 userRouter.get("/profile", auth, getProfile);

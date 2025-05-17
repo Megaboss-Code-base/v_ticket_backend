@@ -1,6 +1,6 @@
 import { Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import { UserAttribute, UserInstance } from "../models/userModel";
+import { UserInstance } from "../models/userModel";
 
 export const auth = async (
   req: JwtPayload,
@@ -20,9 +20,9 @@ export const auth = async (
       return res.status(401).json({ error: "Invalid token structure" });
     }
 
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { id },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -45,9 +45,9 @@ export const adminAuth = async (
   next: NextFunction
 ): Promise<any> => {
   try {
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { id: req.user },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });

@@ -10,4 +10,8 @@ npx sequelize-cli db:migrate:undo --config config.js
 https://virtual-ticket-two.vercel.app/dashboard
 
 
-npx sequelize-cli db:migrate --name 20250407100521-virtualPassword-to-events.js --config config.js
+npx sequelize-cli db:migrate --name transfer-error-to-transactions
+
+20250407100521-virtualPassword-to-events.js --config config.
+
+

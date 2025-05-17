@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { EventInstance } from "../models/eventModel";
-import { UserAttribute, UserInstance } from "../models/userModel";
+import {  UserInstance } from "../models/userModel";
 import { JwtPayload } from "jsonwebtoken";
 import slugify from "slugify";
 import { v2 as cloudinary } from "cloudinary";
@@ -174,7 +174,7 @@ export const deleteEvent = async (
 
     const user = (await UserInstance.findOne({
       where: { id: req.user },
-    })) as unknown as UserAttribute;
+    }));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -348,7 +348,7 @@ export const createEvent = async (
   const userId = req.user;
   const user = (await UserInstance.findOne({
     where: { id: userId },
-  })) as unknown as UserAttribute;
+  }));
 
   if (!user) {
     return res

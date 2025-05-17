@@ -17,7 +17,7 @@ import {
 } from "../config";
 import TransactionInstance from "../models/transactionModel";
 import EventInstance from "../models/eventModel";
-import { UserAttribute, UserInstance } from "../models/userModel";
+import { UserInstance } from "../models/userModel";
 import QRCode from "qrcode";
 import { NotificationInstance } from "../models/notificationModel";
 import sendEmail from "../utilities/sendMail";
@@ -193,9 +193,9 @@ export const purchaseTicket = async (
       isScanned: false,
     });
 
-    const eventOwner = (await UserInstance.findOne({
+    const eventOwner = await UserInstance.findOne({
       where: { id: event.userId },
-    })) as unknown as UserAttribute;
+    });
 
     if (!eventOwner) {
       return res.status(404).json({ error: "Event owner not found" });
@@ -332,59 +332,56 @@ export const handlePaymentVerification = async (
 ): Promise<any> => {
   const { reference } = req.body;
 
+  if (!reference) {
+    return res.status(400).json({ error: "Missing payment reference" });
+  }
+
   try {
-    let paymentDetails,
-      totalAmount,
-      ticketId,
-      ticketPrice,
-      quantity,
-      email,
-      name;
-
-    if (reference) {
-      const {
-        data: { data },
-      } = await axios.get(
-        `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
-        { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
-      );
-
-      paymentDetails = data;
-      if (paymentDetails.status !== "success") {
-        return res.status(400).json({ error: "Payment verification failed" });
+    // VERIFY TRANSACTION FROM PAYSTACK
+    const {
+      data: { data: paymentDetails },
+    } = await axios.get(
+      `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
+      {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        },
       }
+    );
 
-      totalAmount = paymentDetails.amount / 100;
-      email = paymentDetails.customer.email;
-      ticketId = getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "ticket_id"
-      );
-      name = getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "full_name"
-      );
-      quantity = parseInt(
-        getCustomFieldValue(
-          paymentDetails.metadata?.custom_fields,
-          "quantity"
-        ) || "1",
-        10
-      );
-      ticketPrice = parseInt(
-        getCustomFieldValue(
-          paymentDetails.metadata?.custom_fields,
-          "ticket_price"
-        ) || "1",
-        10
-      );
-    } else {
-      return res.status(400).json({ error: "Missing transaction reference" });
+    if (paymentDetails.status !== "success") {
+      return res.status(400).json({ error: "Payment verification failed" });
     }
 
+    // Extract details
+    const totalAmount = paymentDetails.amount / 100;
+    const email = paymentDetails.customer.email;
     const paymentReference = paymentDetails.reference;
     const currency = paymentDetails.currency;
     const id = paymentDetails.id;
+
+    const ticketId = getCustomFieldValue(
+      paymentDetails.metadata?.custom_fields,
+      "ticket_id"
+    );
+    const name = getCustomFieldValue(
+      paymentDetails.metadata?.custom_fields,
+      "full_name"
+    );
+    const quantity = parseInt(
+      getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "quantity"
+      ) || "1",
+      10
+    );
+    const ticketPrice = parseInt(
+      getCustomFieldValue(
+        paymentDetails.metadata?.custom_fields,
+        "ticket_price"
+      ) || "1",
+      10
+    );
 
     const [existingTransaction, existingTicket] = await Promise.all([
       TransactionInstance.findOne({
@@ -431,21 +428,24 @@ export const handlePaymentVerification = async (
 
       ticket.validationStatus = "valid";
       ticket.paid = true;
-      ticket.flwRef = paymentReference; // Optional: consider renaming this field
+      ticket.flwRef = paymentReference;
       await ticket.save({ transaction });
 
       const ticketType = event.ticketType.find(
         (t) => t.name === ticket.ticketType
       );
-      if (!ticketType || parseInt(ticketType.quantity) < quantity) {
+
+      if (!ticketType) throw new Error("Ticket type not found");
+
+      const availableQuantity = parseInt(ticketType.quantity || "0");
+      const soldCount = parseInt(ticketType.sold || "0");
+
+      if (availableQuantity < quantity) {
         throw new Error("Not enough tickets available");
       }
-      ticketType.sold = (
-        parseInt(ticketType.sold || "0") + quantity
-      ).toString();
-      ticketType.quantity = (
-        parseInt(ticketType.quantity || "0") - quantity
-      ).toString();
+
+      ticketType.sold = (soldCount + quantity).toString();
+      ticketType.quantity = (availableQuantity - quantity).toString();
 
       await EventInstance.update(
         { ticketType: event.ticketType },
@@ -456,14 +456,13 @@ export const handlePaymentVerification = async (
         where: { id: event.userId },
         transaction,
       });
+
       if (eventOwner) {
         await NotificationInstance.create(
           {
             id: uuidv4(),
             title: `Ticket purchased for "${event.title}"`,
-            message: `A ticket was purchased for "${
-              event.title
-            }". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
+            message: `A ticket was purchased for "${event.title}". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
               2
             )}. Purchaser: ${ticket.fullName}.`,
             userId: event.userId,
@@ -473,12 +472,12 @@ export const handlePaymentVerification = async (
         );
       }
 
-      const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
+      // const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
 
-      await UserInstance.increment(
-        { totalEarnings: appOwnerEarnings },
-        { where: { id: ACCOUNT_OWNER_ID }, transaction }
-      );
+      // await UserInstance.increment(
+      //   { totalEarnings: appOwnerEarnings },
+      //   { where: { id: ACCOUNT_OWNER_ID }, transaction }
+      // );
 
       await sendTicketEmail(
         name,

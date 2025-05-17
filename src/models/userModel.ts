@@ -1,32 +1,42 @@
-import { DataTypes, Model } from "sequelize";
+import {
+  DataTypes,
+  Model,
+  InferAttributes,
+  InferCreationAttributes,
+  CreationOptional,
+} from "sequelize";
 import { db } from "../config";
 
-export interface UserAttribute {
-  id: string;
-  fullName: string;
-  email: string;
-  password: string;
-  profilePic: string;
-  role: "user" | "admin";
-  phone: string;
-  businessName: string;
-  companyWebsite: string;
-  address: string;
-  timezone: string;
-  country: string;
-  currency: string;
-  isVerified: boolean;
-  userValidationSecret: string | null;
-  otpVerificationExpiry: Date | null;
-  account_name: string | null;
-  account_code: string | null;
-  account_bank: string | null;
-  account_number: string | null;
-  account_country: string | null;
-  totalEarnings: number;
+export class UserInstance extends Model<
+  InferAttributes<UserInstance>,
+  InferCreationAttributes<UserInstance>
+> {
+  declare id: string;
+  declare fullName: string;
+  declare email: string;
+  declare password: string;
+  declare profilePic: string;
+  declare role: "user" | "admin";
+  declare phone: string;
+  declare businessName: string;
+  declare companyWebsite: string;
+  declare address: string;
+  declare timezone: string;
+  declare country: string;
+  declare currency: string;
+  declare isVerified: boolean;
+  declare userValidationSecret: CreationOptional<string | null>;
+  declare otpVerificationExpiry: CreationOptional<Date | null>;
+  declare account_name: CreationOptional<string | null>;
+  declare account_code: CreationOptional<string | null>;
+  declare account_bank: CreationOptional<string | null>;
+  declare account_number: CreationOptional<string | null>;
+  declare account_country: CreationOptional<string | null>;
+  declare paystackRecipientCode: CreationOptional<string | null | undefined>;
+  declare totalEarnings: number;
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
 }
-
-export class UserInstance extends Model<UserAttribute> {}
 
 UserInstance.init(
   {
@@ -118,10 +128,24 @@ UserInstance.init(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    paystackRecipientCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     totalEarnings: {
       type: DataTypes.FLOAT,
       allowNull: false,
       defaultValue: 0,
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
     },
   },
   {
@@ -129,3 +153,5 @@ UserInstance.init(
     tableName: "users",
   }
 );
+
+export default UserInstance;

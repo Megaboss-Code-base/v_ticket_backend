@@ -2,9 +2,6 @@ import { Request, Response } from "express";
 import { EventInstance } from "../models/eventModel";
 import { TicketInstance } from "../models/ticketModel";
 import { JwtPayload } from "jsonwebtoken";
-import { ModeratorInstance } from "../models/moderatorModel";
-import { UserAttribute, UserInstance } from "../models/userModel";
-import sharp from "sharp";
 import { verifyTicketSignature } from "../config";
 
 // @ts-ignore

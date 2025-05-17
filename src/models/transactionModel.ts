@@ -17,6 +17,9 @@ export interface TransactionAttribute {
   paymentStatus: string;
   paymentReference: string;
   currency: string;
+  transferStatus?: string;
+  transferReference?: string | null;
+  transferError?: string | null;
   createdAt: CreationOptional<Date>;
   updatedAt: CreationOptional<Date>;
 }
@@ -33,6 +36,9 @@ export class TransactionInstance extends Model<
   declare paymentStatus: string;
   declare paymentReference: string;
   declare currency: string;
+  declare transferStatus: string| null;
+  declare transferReference: string | null;
+  declare transferError: string | null;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -43,7 +49,6 @@ TransactionInstance.init(
       type: DataTypes.STRING,
       primaryKey: true,
       allowNull: false,
-      // autoIncrement: true,
     },
     email: {
       type: DataTypes.STRING,
@@ -77,6 +82,20 @@ TransactionInstance.init(
     currency: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    transferStatus: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "pending", // Default status
+    },
+    transferReference: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    transferError: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
     },
     createdAt: {
       type: DataTypes.DATE,

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { UserAttribute, UserInstance } from "../models/userModel";
+import { UserInstance } from "../models/userModel";
 import { v4 as uuidv4 } from "uuid";
 import { userRegistrationSchema } from "../utilities/validation";
 import bcrypt from "bcryptjs";
@@ -133,9 +133,9 @@ export const verifyOTP = async (req: Request, res: Response): Promise<any> => {
 
     const newEmail = email.trim().toLowerCase();
 
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { email: newEmail },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(404).json({ Error: "User not found" });
@@ -188,9 +188,9 @@ export const resendVerificationOTP = async (
 
     const newEmail = email.trim().toLowerCase();
 
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { email: newEmail },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(404).json({ Error: "User not found" });
@@ -253,9 +253,9 @@ export const login = async (req: Request, res: Response): Promise<any> => {
 
     const newEmail = email.trim().toLowerCase();
 
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { email: newEmail },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(400).json({
@@ -361,9 +361,9 @@ export const changePassword = async (
     }
 
     const newEmail = email.trim().toLowerCase();
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { email: newEmail },
-    })) as unknown as UserAttribute;
+    });
     if (!user) {
       return res.status(400).json({
         Error: "Invalid credentials",
@@ -407,9 +407,9 @@ export const passwordRecovery = async (
     const { email } = req.body;
 
     const newEmail = email.trim().toLowerCase();
-    const user = (await UserInstance.findOne({
+    const user = await UserInstance.findOne({
       where: { email: newEmail },
-    })) as unknown as UserAttribute;
+    });
 
     if (!user) {
       return res.status(400).json({
@@ -453,73 +453,6 @@ export const passwordRecovery = async (
     });
   }
 };
-
-// export const updateProfile = async (
-//   req: JwtPayload,
-//   res: Response
-// ): Promise<any> => {
-//   try {
-//     const userId = req.user;
-//     const {
-//       fullName,
-//       phone,
-//       profilePic,
-//       businessName,
-//       companyWebsite,
-//       address,
-//       country,
-//       timezone,
-//       account_bank,
-//       account_number,
-//     } = req.body;
-
-//     const user = await UserInstance.findOne({
-//       where: { id: userId },
-//       attributes: {
-//         exclude: [
-//           "password",
-//           "userValidationSecret",
-//           "otpVerificationExpiry",
-//           "updatedAt",
-//           "createdAt",
-//           "id",
-//         ],
-//       },
-//     });
-
-//     if (!user) {
-//       return res.status(404).json({ Error: "User not found" });
-//     }
-
-//     const updateFields: any = {};
-
-//     if (fullName) updateFields.fullName = fullName;
-//     if (phone) updateFields.phone = phone;
-//     if (profilePic) updateFields.profilePic = profilePic;
-//     if (businessName) updateFields.businessName = businessName;
-//     if (companyWebsite) updateFields.companyWebsite = companyWebsite;
-//     if (address) updateFields.address = address;
-//     if (timezone) updateFields.timezone = timezone;
-//     if (country) updateFields.country = country;
-//     if (account_bank) updateFields.account_bank = account_bank;
-//     if (account_number) updateFields.account_number = account_number;
-
-//     if (Object.keys(updateFields).length === 0) {
-//       return res.status(400).json({ Error: "No valid fields to update" });
-//     }
-
-//     await UserInstance.update(updateFields, { where: { id: userId } });
-
-//     return res.status(200).json({
-//       message: "Profile updated successfully",
-//     });
-//   } catch (error: any) {
-//     res.status(500).json({
-//       Error: `Internal server error: ${error.message}`,
-//       route: "users/update-profile",
-//     });
-//   }
-// };
 
 export const uploadPicture = async (
   req: JwtPayload,

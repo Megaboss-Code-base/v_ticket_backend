@@ -44,9 +44,7 @@ const getCustomFieldValue = (
   return field ? field.value : "";
 };
 
-console.log("PAYSTACK_BASE_URL",PAYSTACK_BASE_URL)
 console.log("PAYSTACK_SECRET_KEY",PAYSTACK_SECRET_KEY)
-console.log("111",)
 
 export const purchaseTicket = async (
   req: Request,

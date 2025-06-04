@@ -464,7 +464,7 @@ export const handlePaymentVerification = async (
           {
             id: uuidv4(),
             title: `Ticket purchased for "${event.title}"`,
-            message: `A ticket was purchased for "${event.title}". Amount: ${currency} ${(totalAmount * 0.8847).toFixed(
+            message: `A ticket was purchased for "${event.title}". Amount: ${currency} ${(totalAmount * 0.98).toFixed(
               2
             )}. Purchaser: ${ticket.fullName}.`,
             userId: event.userId,

@@ -191,7 +191,7 @@ export const purchaseTicket = async (
       paid: false,
       currency,
       attendees: attendees || [{ name: fullName, email }],
-      validationStatus: "valid",
+      validationStatus: "invalid",
       isScanned: false,
     });
 

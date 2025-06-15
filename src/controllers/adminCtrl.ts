@@ -131,3 +131,37 @@ export const getTransactions = async (
       .json({ error: "Server Error fetching transactions" });
   }
 };
+
+export const getTicketsSummary = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  const { eventId } = req.params;
+
+  try {
+    const event = await EventInstance.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const [allTickets, paidTickets, unpaidTickets] = await Promise.all([
+      TicketInstance.findAll({ where: { eventId } }),
+      TicketInstance.findAll({ where: { eventId, paid: true } }),
+      TicketInstance.findAll({ where: { eventId, paid: false } }),
+    ]);
+
+    return res.status(200).json({
+      event_id: eventId,
+      event_name: event.title,
+      totalTickets: allTickets.length,
+      paidTickets_count: paidTickets.length,
+      unpaidTickets_count: unpaidTickets.length,
+      allTickets,
+      paidTickets,
+      unpaidTickets,
+    });
+  } catch (error) {
+    console.error("Error fetching tickets summary:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

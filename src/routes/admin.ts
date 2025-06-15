@@ -7,6 +7,7 @@ import {
   promoteUserToAdmin,
   getTicketStats,
   getTransactions,
+  getTicketsSummary,
 } from "../controllers/adminCtrl";
 import { auth, adminAuth } from "../middlewares/auth";
 
@@ -24,5 +25,6 @@ router.patch("/users/:id/promote", auth, adminAuth, promoteUserToAdmin);
 // Stats & Analytics
 router.get("/stats/tickets", auth, adminAuth, getTicketStats);
 router.get("/transactions", auth, adminAuth, getTransactions );
+router.get("/events/:eventId/tickets-summary",auth, adminAuth, getTicketsSummary);
 
 export default router;

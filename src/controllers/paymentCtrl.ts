@@ -44,8 +44,6 @@ const getCustomFieldValue = (
   return field ? field.value : "";
 };
 
-console.log("PAYSTACK_SECRET_KEY",PAYSTACK_SECRET_KEY)
-
 export const purchaseTicket = async (
   req: Request,
   res: Response
@@ -327,7 +325,6 @@ export const handleUnifiedWebhook = async (
   }
 };
 
-
 export const handlePaymentVerification = async (
   req: Request,
   res: Response
@@ -371,10 +368,8 @@ export const handlePaymentVerification = async (
       "full_name"
     );
     const quantity = parseInt(
-      getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "quantity"
-      ) || "1",
+      getCustomFieldValue(paymentDetails.metadata?.custom_fields, "quantity") ||
+        "1",
       10
     );
     const ticketPrice = parseInt(
@@ -448,6 +443,7 @@ export const handlePaymentVerification = async (
 
       ticketType.sold = (soldCount + quantity).toString();
       ticketType.quantity = (availableQuantity - quantity).toString();
+   
 
       await EventInstance.update(
         { ticketType: event.ticketType },
@@ -464,7 +460,9 @@ export const handlePaymentVerification = async (
           {
             id: uuidv4(),
             title: `Ticket purchased for "${event.title}"`,
-            message: `A ticket was purchased for "${event.title}". Amount: ${currency} ${(totalAmount * 0.98).toFixed(
+            message: `A ticket was purchased for "${
+              event.title
+            }". Amount: ${currency} ${(totalAmount * 0.98).toFixed(
               2
             )}. Purchaser: ${ticket.fullName}.`,
             userId: event.userId,

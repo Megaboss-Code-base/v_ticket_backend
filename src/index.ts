@@ -11,6 +11,7 @@ import eventRouter from "./routes/event";
 import ticketRouter from "./routes/ticket";
 import notificationRouter from "./routes//notification";
 import paymentRoutes from "./routes/payment";
+import adminRoutes from "./routes/admin";
 import { deleteExpiredEvents } from "./controllers/eventCtrl";
 
 dotenv.config();
@@ -36,6 +37,7 @@ app.use("/api/v1/events", eventRouter);
 app.use("/api/v1/tickets", ticketRouter);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/payment", paymentRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 cron.schedule("0 0 * * *", async () => {
   console.log("Running daily cleanup for expired events...");

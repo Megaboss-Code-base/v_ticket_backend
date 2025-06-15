@@ -34,7 +34,6 @@ export interface VirtualDetails {
   [key: string]: string | boolean | undefined;
 }
 
-
 export class EventInstance extends Model<
   InferAttributes<EventInstance>,
   InferCreationAttributes<EventInstance>
@@ -55,6 +54,7 @@ export class EventInstance extends Model<
   declare userId: string;
   declare isVirtual: boolean | null;
   declare virtualEventDetails: VirtualDetails | null;
+  declare commissionRate: number | null;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -150,6 +150,11 @@ EventInstance.init(
     virtualEventDetails: {
       type: DataTypes.JSONB,
       allowNull: true,
+    },
+    commissionRate: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0.1, // default 10% commission
     },
     createdAt: {
       type: DataTypes.DATE,

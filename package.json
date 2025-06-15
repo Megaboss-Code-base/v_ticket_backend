@@ -7,12 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "migrate": "sequelize-cli db:migrate",
-    "down": "sequelize-cli db:migrate:undo"
+    "generate": "npx sequelize-cli migration:generate --name",
+    "migrate": "npx sequelize-cli db:migrate --config config.js",
+    "migrate:down": "npx sequelize-cli db:migrate:undo --config config.js"
   },
-  "engines": {
-    "node": "20.x"
-  },
+
   "dependencies": {
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",

@@ -5,3 +5,4 @@ dist
 note.md
 deploy.env
 KeptFolder
+yarn*

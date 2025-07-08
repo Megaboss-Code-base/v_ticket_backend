@@ -44,6 +44,89 @@ const getCustomFieldValue = (
   return field ? field.value : "";
 };
 
+export const handleUnifiedWebhook = async (
+  req: Request,
+  res: Response
+): Promise<any> => {
+  try {
+    const paystackSignature = Array.isArray(req.headers["x-paystack-signature"])
+      ? req.headers["x-paystack-signature"][0]
+      : req.headers["x-paystack-signature"];
+
+    if (!paystackSignature) {
+      return res.status(401).json({ error: "Missing Paystack signature" });
+    }
+
+    const payload = req.body;
+    const payloadString = JSON.stringify(req.body);
+
+    if (!validatePaystackWebhook(paystackSignature, payloadString)) {
+      return res.status(401).json({ error: "Invalid webhook signature" });
+    }
+
+    if (payload.event !== "charge.success") {
+      return res.status(400).json({ error: "Invalid Paystack webhook event" });
+    }
+
+    const { id, reference, amount, currency, metadata, customer } =
+      payload.data;
+    const email = customer.email;
+    const totalAmount = amount / 100;
+
+    const customFields = metadata?.custom_fields || [];
+    const ticketIdsString = getCustomFieldValue(customFields, "ticket_ids");
+    const ticketIds = ticketIdsString ? JSON.parse(ticketIdsString) : [];
+    const fullName = getCustomFieldValue(customFields, "full_name");
+
+    if (ticketIds.length === 0) {
+      return res.status(400).json({ error: "No ticket IDs found in metadata" });
+    }
+
+    // Check if payment already processed (avoid duplicates)
+    const existingTransaction = await TransactionInstance.findOne({
+      where: { paymentReference: reference, paymentStatus: "successful" },
+    });
+    if (existingTransaction) {
+      return res.status(200).json({ message: "Payment already processed" });
+    }
+
+    // Begin DB transaction to ensure consistency
+    const transaction = await db.transaction();
+
+    try {
+      // Create transaction record
+      await TransactionInstance.create(
+        {
+          id: id.toString(),
+          email,
+          fullName,
+          ticketId: ticketIds[0],
+          paymentStatus: "successful",
+          totalAmount,
+          paymentReference: reference,
+          currency,
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      return res
+        .status(200)
+        .json({ message: "Paystack webhook processed successfully" });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error: any) {
+    console.error("Error processing webhook:", error.message);
+    return res.status(500).json({
+      error: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
 export const purchaseTicket = async (
   req: Request,
   res: Response
@@ -75,37 +158,24 @@ export const purchaseTicket = async (
 
   try {
     const event = await EventInstance.findOne({ where: { id: eventId } });
-
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
+    if (!event) return res.status(404).json({ error: "Event not found" });
 
     const eventDate = new Date(event.date);
     const today = new Date();
-
-    today.setHours(0, 0, 0, 0);
     eventDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
 
-    const eventDateString = eventDate.toISOString().split("T")[0];
-    const todayDateString = today.toISOString().split("T")[0];
-
-    if (eventDateString < todayDateString) {
-      return res.status(400).json({
-        error: "Cannot purchase tickets for expired events",
-      });
-    }
-
-    if (!Array.isArray(event.ticketType)) {
-      return res.status(400).json({ error: "Invalid ticket type structure" });
+    if (eventDate < today) {
+      return res
+        .status(400)
+        .json({ error: "Cannot purchase tickets for expired events" });
     }
 
     const ticketInfo = event.ticketType.find(
       (ticket) => ticket.name === ticketType
     );
-
-    if (!ticketInfo) {
+    if (!ticketInfo)
       return res.status(400).json({ error: "Invalid ticket type" });
-    }
 
     if (Number(ticketInfo.quantity) < quantity) {
       return res.status(400).json({
@@ -113,48 +183,52 @@ export const purchaseTicket = async (
       });
     }
 
-    const recipients = [{ name: fullName, email }, ...(attendees || [])];
-
     const ticketPrice = parseFloat(ticketInfo.price);
-    const ticketId = uuidv4();
-    const signature = generateTicketSignature(ticketId);
-    const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+    const totalPrice = ticketPrice * quantity;
 
-    const qrCodeBuffer = await QRCode.toBuffer(qrCodeData);
+    // Arrays to collect created ticket data
+    const ticketIds: string[] = [];
+    const qrCodes: string[] = [];
 
-    const cloudinaryResult = await new Promise<string>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: "qrcodes", resource_type: "image" },
-        (error, result) => {
-          if (error) {
-            console.error("Cloudinary upload error:", error);
-            return reject(error);
-          }
-          resolve(result?.url || "");
-        }
-      );
-
-      uploadStream.end(qrCodeBuffer);
-    });
-
+    // Free tickets: create all tickets immediately, mark paid:true
     if (ticketPrice === 0) {
-      const ticket = await TicketInstance.create({
-        id: ticketId,
-        email,
-        phone,
-        fullName,
-        eventId: event.id,
-        ticketType,
-        price: 0,
-        purchaseDate: new Date(),
-        qrCode: cloudinaryResult,
-        paid: true,
-        currency,
-        attendees: attendees || [{ name: fullName, email }],
-        validationStatus: "valid",
-        isScanned: false,
-      });
+      for (let i = 0; i < quantity; i++) {
+        const ticketId = uuidv4();
+        const signature = generateTicketSignature(ticketId);
+        const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+        const qrCodeBuffer = await QRCode.toBuffer(qrCodeData);
 
+        const qrUrl = await new Promise<string>((resolve, reject) => {
+          cloudinary.uploader
+            .upload_stream(
+              { folder: "qrcodes", resource_type: "image" },
+              (err, result) => (err ? reject(err) : resolve(result?.url || ""))
+            )
+            .end(qrCodeBuffer);
+        });
+
+        await TicketInstance.create({
+          id: ticketId,
+          email,
+          phone,
+          fullName: i === 0 ? fullName : attendees?.[i - 1]?.name || "Guest",
+          eventId: event.id,
+          ticketType,
+          price: 0,
+          purchaseDate: new Date(),
+          qrCode: qrUrl,
+          paid: true,
+          currency,
+          attendees: [],
+          validationStatus: "valid",
+          isScanned: false,
+        });
+
+        ticketIds.push(ticketId);
+        qrCodes.push(qrUrl);
+      }
+
+      // Update event ticket stock
       ticketInfo.quantity = (Number(ticketInfo.quantity) - quantity).toString();
       ticketInfo.sold = (Number(ticketInfo.sold || 0) + quantity).toString();
 
@@ -163,163 +237,125 @@ export const purchaseTicket = async (
         { where: { id: event.id } }
       );
 
-      await sendTicketEmail(fullName, email, event, ticket, 0, currency, 0);
-
-      return res.status(200).json({
-        message: "Ticket successfully created for free event",
-        ticketId: ticket.id,
-        redirect: FRONTEND_URL,
-        ticket,
-      });
-    }
-
-    // For paid tickets
-    const totalPrice = ticketPrice * quantity;
-
-    const ticket = await TicketInstance.create({
-      id: ticketId,
-      email,
-      phone,
-      fullName,
-      eventId: event.id,
-      ticketType,
-      price: totalPrice,
-      purchaseDate: new Date(),
-      qrCode: cloudinaryResult,
-      paid: false,
-      currency,
-      attendees: attendees || [{ name: fullName, email }],
-      validationStatus: "invalid",
-      isScanned: false,
-    });
-
-    const eventOwner = await UserInstance.findOne({
-      where: { id: event.userId },
-    });
-
-    if (!eventOwner) {
-      return res.status(404).json({ error: "Event owner not found" });
-    }
-
-    const tx_ref = generateReference();
-    try {
-      const paystackResponse = await axios.post(
-        `${PAYSTACK_BASE_URL}/transaction/initialize`,
-        {
-          email,
-          amount: totalPrice * 100, // Paystack expects amount in kobo/cents
-          callback_url: `${FRONTEND_URL}/success?ticketId=${ticketId}`,
-          metadata: {
-            custom_fields: [
-              {
-                display_name: "Ticket ID",
-                variable_name: "ticket_id",
-                value: ticketId,
-              },
-              {
-                display_name: "Quantity",
-                variable_name: "quantity",
-                value: quantity.toString(),
-              },
-              {
-                display_name: "Full Name",
-                variable_name: "full_name",
-                value: fullName,
-              },
-              {
-                display_name: "Ticket Price",
-                variable_name: "ticket_price",
-                value: ticketPrice,
-              },
-            ],
-          },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
+      // Send tickets immediately via email
+      await sendTicketEmail(
+        fullName,
+        email,
+        event,
+        ticketIds,
+        qrCodes,
+        attendees || [],
+        totalPrice,
+        currency,
+        0
       );
 
-      if (
-        paystackResponse.data &&
-        paystackResponse.data.data &&
-        paystackResponse.data.data.authorization_url
-      ) {
-        return res.status(200).json({
-          link: paystackResponse.data.data.authorization_url,
-          ticketId,
-        });
-      } else {
-        throw new Error("Error creating Paystack payment link");
-      }
-    } catch (paystackError: any) {
-      console.log(`Paystack error:`, paystackError.message);
-      return res.status(500).json({
-        error: "Failed to create payment link with Paystack",
+      return res.status(200).json({
+        message: "Tickets created for free event",
+        ticketIds,
+        redirect: FRONTEND_URL,
       });
     }
-  } catch (error: any) {
-    return res.status(500).json({
-      error: "Failed to create ticket",
-      details: error.message,
+
+    // Paid tickets: Create tickets first with paid=false
+    for (let i = 0; i < quantity; i++) {
+      const ticketId = uuidv4();
+      const signature = generateTicketSignature(ticketId);
+      const qrCodeData = `${FRONTEND_URL}/validate-ticket?ticketId=${ticketId}&signature=${signature}`;
+      const qrCodeBuffer = await QRCode.toBuffer(qrCodeData);
+
+      const qrUrl = await new Promise<string>((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            { folder: "qrcodes", resource_type: "image" },
+            (err, result) => (err ? reject(err) : resolve(result?.url || ""))
+          )
+          .end(qrCodeBuffer);
+      });
+
+      await TicketInstance.create({
+        id: ticketId,
+        email,
+        phone,
+        fullName: i === 0 ? fullName : attendees?.[i - 1]?.name || "Guest",
+        eventId: event.id,
+        ticketType,
+        price: totalPrice / quantity,
+        purchaseDate: new Date(),
+        qrCode: qrUrl,
+        paid: false,
+        currency,
+        attendees: i === 0 ? attendees : [],
+        validationStatus: "invalid",
+        isScanned: false,
+      });
+
+      ticketIds.push(ticketId);
+      qrCodes.push(qrUrl);
+    }
+
+    // Send ticket IDs to Paystack metadata for verification after payment
+    const tx_ref = generateReference();
+
+    const paystackRes = await axios.post(
+      `${PAYSTACK_BASE_URL}/transaction/initialize`,
+      {
+        email,
+        amount: totalPrice * 100,
+        callback_url: `${FRONTEND_URL}/success`,
+        metadata: {
+          custom_fields: [
+            {
+              display_name: "Full Name",
+              variable_name: "full_name",
+              value: fullName,
+            },
+            {
+              display_name: "Ticket IDs",
+              variable_name: "ticket_ids",
+              value: JSON.stringify(ticketIds),
+            },
+            {
+              display_name: "Quantity",
+              variable_name: "quantity",
+              value: quantity.toString(),
+            },
+            {
+              display_name: "Ticket Type",
+              variable_name: "ticket_type",
+              value: ticketType,
+            },
+            {
+              display_name: "Event ID",
+              variable_name: "event_id",
+              value: eventId,
+            },
+            {
+              display_name: "Attendees",
+              variable_name: "attendees",
+              value: JSON.stringify(attendees || []),
+            },
+            {
+              display_name: "Ticket Price",
+              variable_name: "ticket_price",
+              value: ticketPrice.toString(),
+            },
+          ],
+        },
+      },
+      {
+        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+      }
+    );
+
+    return res.status(200).json({
+      link: paystackRes.data.data.authorization_url,
+      reference: tx_ref,
+      ticketIds,
     });
-  }
-};
-
-export const handleUnifiedWebhook = async (
-  req: Request,
-  res: Response
-): Promise<any> => {
-  try {
-    const paystackSignature = Array.isArray(req.headers["x-paystack-signature"])
-      ? req.headers["x-paystack-signature"][0]
-      : req.headers["x-paystack-signature"];
-
-    if (!paystackSignature) {
-      return res.status(401).json({ error: "Missing Paystack signature" });
-    }
-
-    const payload = req.body;
-    const payloadString = JSON.stringify(req.body);
-
-    if (validatePaystackWebhook(paystackSignature, payloadString)) {
-      if (req.body.event === "charge.success") {
-        const { id, reference, amount, currency, metadata } = payload.data;
-        const { email } = payload.data.customer;
-        const totalAmount = amount / 100; // Convert from kobo to Naira
-
-        const customFields = metadata?.custom_fields || [];
-        const ticketId = getCustomFieldValue(customFields, "ticket_id");
-        const fullName = getCustomFieldValue(customFields, "full_name");
-
-        await TransactionInstance.create({
-          id: payload.data.id.toString(),
-          email,
-          fullName,
-          ticketId,
-          paymentStatus: "successful",
-          totalAmount,
-          paymentReference: reference,
-          currency,
-        });
-
-        return res.status(200).json({
-          message: "Paystack webhook processed successfully",
-        });
-      }
-
-      return res.status(400).json({
-        error: "Invalid Paystack webhook event",
-      });
-    }
-
-    return res.status(401).json({ error: "Invalid webhook signature" });
   } catch (error: any) {
-    console.error("Error processing webhook:", error.message);
     return res.status(500).json({
-      error: "Internal server error",
+      error: "Purchase initiation failed",
       details: error.message,
     });
   }
@@ -336,53 +372,46 @@ export const handlePaymentVerification = async (
   }
 
   try {
-    // VERIFY TRANSACTION FROM PAYSTACK
     const {
-      data: { data: paymentDetails },
+      data: { data: payment },
     } = await axios.get(
       `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
       {
-        headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        },
+        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
       }
     );
 
-    if (paymentDetails.status !== "success") {
+    if (payment.status !== "success") {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 
-    // Extract details
-    const totalAmount = paymentDetails.amount / 100;
-    const email = paymentDetails.customer.email;
-    const paymentReference = paymentDetails.reference;
-    const currency = paymentDetails.currency;
-    const id = paymentDetails.id;
-
-    const ticketId = getCustomFieldValue(
-      paymentDetails.metadata?.custom_fields,
-      "ticket_id"
-    );
-    const name = getCustomFieldValue(
-      paymentDetails.metadata?.custom_fields,
-      "full_name"
-    );
+    // Extract custom metadata
+    const customFields = payment.metadata?.custom_fields || [];
+    const name = getCustomFieldValue(customFields, "full_name");
     const quantity = parseInt(
-      getCustomFieldValue(paymentDetails.metadata?.custom_fields, "quantity") ||
-        "1",
+      getCustomFieldValue(customFields, "quantity") || "1",
       10
     );
-    const ticketPrice = parseInt(
-      getCustomFieldValue(
-        paymentDetails.metadata?.custom_fields,
-        "ticket_price"
-      ) || "1",
-      10
+    const ticketType = getCustomFieldValue(customFields, "ticket_type");
+    const eventId = getCustomFieldValue(customFields, "event_id");
+    const attendees = JSON.parse(
+      getCustomFieldValue(customFields, "attendees") || "[]"
+    );
+    const ticketPrice = parseFloat(
+      getCustomFieldValue(customFields, "ticket_price") || "0"
     );
 
+    const ticketIdsString = getCustomFieldValue(customFields, "ticket_ids");
+    const ticketIds = ticketIdsString ? JSON.parse(ticketIdsString) : [];
+    const ticketId = ticketIds[0] || null;
+
+    // Check if transaction & ticket already exist
     const [existingTransaction, existingTicket] = await Promise.all([
       TransactionInstance.findOne({
-        where: { paymentReference, paymentStatus: "successful" },
+        where: {
+          paymentReference: payment.reference,
+          paymentStatus: "successful",
+        },
       }),
       TicketInstance.findOne({
         where: { id: ticketId, paid: true, validationStatus: "valid" },
@@ -393,63 +422,108 @@ export const handlePaymentVerification = async (
       return res.status(400).json({ error: "Payment already processed." });
     }
 
+    // Proceed with ticket creation and update
+    const event = await EventInstance.findOne({ where: { id: eventId } });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const ticketTypeObj = event.ticketType.find((t) => t.name === ticketType);
+    if (!ticketTypeObj || Number(ticketTypeObj.quantity) < quantity) {
+      return res
+        .status(400)
+        .json({ error: "Insufficient ticket availability" });
+    }
+
     const transaction = await db.transaction();
     try {
-      if (!existingTransaction) {
-        await TransactionInstance.create(
+      const generatedTicketIds: string[] = [];
+      const qrCodes: string[] = [];
+
+      for (let i = 0; i < quantity; i++) {
+        const newTicketId = uuidv4();
+        const signature = generateTicketSignature(newTicketId);
+        const qrData = `${FRONTEND_URL}/validate-ticket?ticketId=${newTicketId}&signature=${signature}`;
+        const qrBuffer = await QRCode.toBuffer(qrData);
+
+        const qrUrl = await new Promise<string>((resolve, reject) => {
+          cloudinary.uploader
+            .upload_stream(
+              { folder: "qrcodes", resource_type: "image" },
+              (err, result) => (err ? reject(err) : resolve(result?.url || ""))
+            )
+            .end(qrBuffer);
+        });
+
+        await TicketInstance.create(
           {
-            id,
-            email,
-            fullName: name,
-            ticketId,
-            paymentStatus: "successful",
-            totalAmount,
-            paymentReference,
-            currency,
+            id: newTicketId,
+            email: payment.customer.email,
+            phone: "",
+            fullName: i === 0 ? name : attendees?.[i - 1]?.name || "Guest",
+            eventId: event.id,
+            ticketType,
+            price: ticketPrice,
+            purchaseDate: new Date(),
+            qrCode: qrUrl,
+            paid: true,
+            currency: payment.currency,
+            attendees: [],
+            validationStatus: "valid",
+            isScanned: false,
+            flwRef: reference,
           },
           { transaction }
         );
+
+        generatedTicketIds.push(newTicketId);
+        qrCodes.push(qrUrl);
       }
 
-      const ticket = await TicketInstance.findOne({
-        where: { id: ticketId },
-        transaction,
-      });
-      if (!ticket) throw new Error("Ticket not found");
-
-      const event = await EventInstance.findOne({
-        where: { id: ticket.eventId },
-        transaction,
-      });
-      if (!event) throw new Error("Event not found");
-
-      ticket.validationStatus = "valid";
-      ticket.paid = true;
-      ticket.flwRef = paymentReference;
-      await ticket.save({ transaction });
-
-      const ticketType = event.ticketType.find(
-        (t) => t.name === ticket.ticketType
+      await TransactionInstance.create(
+        {
+          id: payment.id.toString(),
+          email: payment.customer.email,
+          fullName: name,
+          ticketId: generatedTicketIds[0],
+          paymentStatus: "successful",
+          totalAmount: payment.amount / 100,
+          paymentReference: reference,
+          currency: payment.currency,
+        },
+        { transaction }
       );
 
-      if (!ticketType) throw new Error("Ticket type not found");
-
-      const availableQuantity = parseInt(ticketType.quantity || "0");
-      const soldCount = parseInt(ticketType.sold || "0");
-
-      if (availableQuantity < quantity) {
-        throw new Error("Not enough tickets available");
-      }
-
-      ticketType.sold = (soldCount + quantity).toString();
-      ticketType.quantity = (availableQuantity - quantity).toString();
-   
+      // Update stock
+      ticketTypeObj.sold = (
+        Number(ticketTypeObj.sold || 0) + quantity
+      ).toString();
+      ticketTypeObj.quantity = (
+        Number(ticketTypeObj.quantity) - quantity
+      ).toString();
 
       await EventInstance.update(
         { ticketType: event.ticketType },
-        { where: { id: event.id }, transaction }
+        {
+          where: { id: event.id },
+          transaction,
+        }
       );
 
+      // Update previously reserved ticket IDs (optional, fallback logic)
+      if (ticketIds.length > 0) {
+        await TicketInstance.update(
+          {
+            paid: true,
+            validationStatus: "valid",
+            flwRef: reference,
+          },
+          {
+            where: { id: ticketIds },
+            transaction,
+          }
+        );
+      }
+
+      // Notify event owner
       const eventOwner = await UserInstance.findOne({
         where: { id: event.userId },
         transaction,
@@ -459,12 +533,11 @@ export const handlePaymentVerification = async (
         await NotificationInstance.create(
           {
             id: uuidv4(),
-            title: `Ticket purchased for "${event.title}"`,
-            message: `A ticket was purchased for "${
-              event.title
-            }". Amount: ${currency} ${(totalAmount * 0.98).toFixed(
-              2
-            )}. Purchaser: ${ticket.fullName}.`,
+            title: `Tickets purchased for "${event.title}"`,
+            message: `Amount: ${payment.currency} ${(
+              (payment.amount / 100) *
+              0.98
+            ).toFixed(2)}. Purchaser: ${name}.`,
             userId: event.userId,
             isRead: false,
           },
@@ -472,33 +545,32 @@ export const handlePaymentVerification = async (
         );
       }
 
-      // const appOwnerEarnings = parseFloat((totalAmount * 0.0983).toFixed(2));
-
-      // await UserInstance.increment(
-      //   { totalEarnings: appOwnerEarnings },
-      //   { where: { id: ACCOUNT_OWNER_ID }, transaction }
-      // );
-
       await sendTicketEmail(
         name,
-        email,
+        payment.customer.email,
         event,
-        ticket,
-        totalAmount,
-        currency,
+        generatedTicketIds,
+        qrCodes,
+        attendees,
+        payment.amount / 100,
+        payment.currency,
         ticketPrice
       );
 
       await transaction.commit();
-      res.status(200).json({ message: "Payment verified and processed" });
+
+      return res.status(200).json({
+        message: "Payment verified and tickets issued",
+        ticketIds: generatedTicketIds,
+      });
     } catch (err) {
       await transaction.rollback();
       throw err;
     }
   } catch (err: any) {
-    console.error("Payment verification error:", err.message);
-    res
+    console.error("Verification error:", err.message);
+    return res
       .status(500)
-      .json({ error: "Internal server error", details: err.message });
+      .json({ error: "Internal error", details: err.message });
   }
 };

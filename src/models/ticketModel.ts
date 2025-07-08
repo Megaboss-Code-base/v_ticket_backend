@@ -21,6 +21,7 @@ export class TicketInstance extends Model<
   declare price: number;
   declare purchaseDate: Date;
   declare qrCode: string;
+  declare paymentReference?: string;
   declare paid: boolean;
   declare currency: string;
   declare flwRef: string | null;
@@ -125,6 +126,10 @@ TicketInstance.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    paymentReference: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     createdAt: {
       type: DataTypes.DATE,

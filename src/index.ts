@@ -39,10 +39,10 @@ app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/admin", adminRoutes);
 
-cron.schedule("0 0 * * *", async () => {
-  console.log("Running daily cleanup for expired events...");
-  await deleteExpiredEvents();
-});
+// cron.schedule("0 0 * * *", async () => {
+//   console.log("Running daily cleanup for expired events...");
+//   await deleteExpiredEvents();
+// });
 
 app.get("/", (req, res) => {
   res.send(`

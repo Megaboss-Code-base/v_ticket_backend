@@ -89,7 +89,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
         currency: currency || "",
         userValidationSecret,
         otpVerificationExpiry,
-        isVerified: false,
+        isVerified: true,
         totalEarnings: 0,
       },
       { transaction }
@@ -105,11 +105,11 @@ export const register = async (req: Request, res: Response): Promise<any> => {
 
     const message = `You are receiving this email because you (or someone else) has requested for an OTP. Please make a POST request to: \n\n ${resetUrl}. This OTP will expire in the next 10 mins`;
 
-    await sendEmail({
-      email: newEmail,
-      subject: "Register Successfully",
-      message,
-    });
+    // await sendEmail({
+    //   email: newEmail,
+    //   subject: "Register Successfully",
+    //   message,
+    // });
 
     await transaction.commit();
 

@@ -41,7 +41,7 @@ app.use("/api/v1/admin", adminRoutes);
 
 cron.schedule("0 0 * * *", async () => {
   console.log("Running daily cleanup for expired events...");
-  await deleteExpiredEvents();
+  // await deleteExpiredEvents();
 });
 
 app.get("/", (req, res) => {
